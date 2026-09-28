@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type DragEvent, type ChangeEvent } from 'r
 import { useNavigate } from 'react-router-dom';
 import { documentsService } from '../api/documents';
 import { projectsService, type Project } from '../api/projects';
+import { filtersService, type FilterDefinition } from '../api/filters';
 
 // Tracks file upload state
 interface PendingFile {
@@ -19,6 +20,8 @@ export default function Upload() {
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [filterDefs, setFilterDefs] = useState<FilterDefinition[]>([]);
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const allowedMimeTypes = new Set([
     'application/pdf',
@@ -46,6 +49,13 @@ export default function Upload() {
     };
 
     loadProjects();
+  }, []);
+
+  useEffect(() => {
+    filtersService
+      .listFilters()
+      .then(setFilterDefs)
+      .catch((error) => console.error('Failed to fetch filters:', error));
   }, []);
 
   // Handle drag over drop zone
@@ -138,7 +148,7 @@ export default function Upload() {
       );
 
       try {
-        await documentsService.uploadDocument(pendingFile.file, selectedProjectId);
+        await documentsService.uploadDocument(pendingFile.file, selectedProjectId, filterValues);
 
         setPendingFiles((prev) =>
           prev.map((f) =>
@@ -238,6 +248,35 @@ export default function Upload() {
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">{projectsError}</p>
             )}
           </div>
+
+          {filterDefs.length > 0 && (
+            <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Document Details
+              </label>
+              <p className="text-xs text-slate-500 mb-4">
+                These values are applied to every file in this upload batch.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filterDefs.map((def) => (
+                  <div key={def.id}>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                      {def.name}
+                    </label>
+                    <input
+                      type={def.type === 'NUMBER' ? 'number' : def.type === 'DATE' ? 'date' : 'text'}
+                      value={filterValues[def.id] ?? ''}
+                      onChange={(e) =>
+                        setFilterValues((prev) => ({ ...prev, [def.id]: e.target.value }))
+                      }
+                      className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm text-slate-900 dark:text-slate-100"
+                      placeholder={def.type === 'TEXT' ? `Enter ${def.name.toLowerCase()}` : undefined}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div
             onDragOver={handleDragOver}

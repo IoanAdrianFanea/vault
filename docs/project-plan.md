@@ -6,7 +6,7 @@ A multi-user document indexing and retrieval tool for construction operations te
 
 ## Current Position
 
-**Phase 2 is complete. Phase 3 is next.**
+**Phases 2 and 3 are complete. Phase 4 is next.**
 
 All four Phase 2 workstreams are built and wired end to end:
 
@@ -17,7 +17,9 @@ All four Phase 2 workstreams are built and wired end to end:
 
 The smaller Phase 2 items are closed too: the 50MB upload limit is gone, users can change their own email address (with re-verification), `GET /projects` is membership-scoped for non-admins, and the Register page now sends the full name it collects.
 
-Phases 3–7 are not started. The `/admin/filters`, `/admin/archive` and `/jobs` pages exist in the frontend as **static mock previews** of Phases 3, 4 and 6 — they render hard-coded data and call no API.
+Phase 3 (custom filters, combined search+filter, OCR for images) is now built end to end — see the Phase 3 section below.
+
+Phases 4–7 are not started. The `/admin/archive` and `/jobs` pages exist in the frontend as **static mock previews** of Phases 4 and 6 — they render hard-coded data and call no API.
 
 ---
 
@@ -143,28 +145,34 @@ Known gaps in this workstream:
 
 ## Phase 3 – Custom Filters & Search
 
-Status: **not started** — UI mock exists
+Status: **complete**
 
-The `/admin/filters` page exists but is a static mock: hard-coded filter names, a disabled "Add New Filter" form, and no API calls. No `FilterDefinition` or `DocumentFilterValue` tables exist, and no OCR dependency is installed.
+`/admin/filters` is now a real, functional admin page: `FilterDefinition` and `DocumentFilterValue` tables exist (migration `20260928084423_add_custom_filters`), a `/filters` API (`FiltersModule`) backs it, and `tesseract.js` is installed and wired into upload.
 
-### Custom Filters (Admin-Configurable Fields)
-- Admin defines custom filter fields via a settings page
-- Maximum 5 active filters at a time
-- Each filter has a name and a type (text, date, number — to be designed)
-- Once created, filters are available to all users
-- Filters appear on upload forms (data entry) and document list (filtering)
-- Schema: `FilterDefinition` table + `DocumentFilterValue` table
+### Custom Filters (Admin-Configurable Fields) — complete
+| Item | Status | Notes |
+|---|---|---|
+| Admin defines custom filter fields via a settings page | ✅ done | `/admin/filters` — create, rename/retype, delete |
+| Maximum 5 active filters at a time | ✅ done | Enforced in `FiltersService.create`; UI disables the add form and shows a capacity banner at 5/5 |
+| Each filter has a name and a type (text, date, number) | ✅ done | `FilterType` enum: `TEXT`, `NUMBER`, `DATE` |
+| Once created, filters are available to all users | ✅ done | `GET /filters` requires only authentication, not admin |
+| Filters appear on upload forms (data entry) | ✅ done | Upload page renders a "Document Details" section with one input per active filter, applied to every file in the batch |
+| Filters appear on document list (filtering) | ✅ done | Documents page filter panel renders one field per active filter (text/number input, or a from–to date range) |
+| Schema: `FilterDefinition` table + `DocumentFilterValue` table | ✅ done | One `DocumentFilterValue` row per (document, filter) pair; only the column matching the filter's type is populated |
 
-### Search + Filter Together
-- Users select filters and a search query together
-- Both apply simultaneously to narrow results to an exact document
-- Filter-only and search-only modes both still work
-- Date filter applies to the document date (custom filter), not the upload date
+### Search + Filter Together — complete
+| Item | Status | Notes |
+|---|---|---|
+| Users select filters and a search query together | ✅ done | `mainFilter` (filename + extracted text) ANDs with any active custom filters via `customFilters` query param |
+| Filter-only and search-only modes both still work | ✅ done | Both are optional; either can be used alone |
+| Date filter applies to the value entered for that filter | ✅ done | Not tied to upload date — `DocumentFilterValue.valueDate` |
 
-### OCR for Images
-- Pulled forward from Phase 5 — required so images participate in search
-- `tesseract.js` or similar runs after image upload, populates `DocumentText`
-- Same flow as PDF extraction but for JPEG/PNG
+Known gap: renaming a filter is safe, but changing its **type** discards previously entered values for that filter (they were stored in a type-specific column and can't be reinterpreted) — a deliberate, documented tradeoff, not a bug.
+
+### OCR for Images — complete
+- `tesseract.js` (`recognize()`, English model) runs after image upload, populating `DocumentText` so JPEG/PNG uploads participate in full-text search alongside PDFs
+- OCR failures (unreadable/corrupt images) are caught and logged; the document still uploads successfully with `PROCESSED` status and no extracted text, rather than failing the whole upload
+- Note: `tesseract.js` requires a required `errorHandler` callback to avoid crashing the Node process on certain worker-side failures — this is handled in `ExtractionService`
 
 ---
 
@@ -239,7 +247,7 @@ Status: **not started**
 
 - Storage key format is `{userId}/{documentId}.{ext}` where ext is derived from mime type, and `deleted/{userId}/{documentId}.{ext}` while a document sits in the recycle bin. Will change to project-based keys in Phase 4.
 - The `/jobs` route exists in the frontend as a mock-data preview of Phase 6 functionality. Its banner incorrectly says "Phase 3 – Async Processing"; async processing is Phase 6.
-- `/admin/filters` and `/admin/archive` are likewise mock-data previews of Phases 3 and 4.
+- `/admin/archive` is likewise a mock-data preview of Phase 4. `/admin/filters` is now real (Phase 3).
 - `User` has `language`, `timezone` fields that are unused. Candidates for removal — see backlog.
 - Search loads every accessible document with extracted text into memory and filters in JavaScript (`searchDocuments`). Fine at current scale, but it will need a SQL/FTS rewrite before real data volumes.
 - `listDocuments` is hard-capped at 50 rows with no pagination, and search at 20.
@@ -247,14 +255,16 @@ Status: **not started**
 - `POST /projects` has no membership bootstrap — a newly created project has no members until an admin adds them.
 - Deleting a project still hard-deletes its documents by cascade, bypassing the recycle bin. Only per-document deletion is recoverable.
 - The purge task runs in-process on a single API instance. If the API is ever scaled out, every instance will run it — the conditional-delete claim makes that safe, but it is wasted work.
+- Custom filter values are entered once at upload time; there is no UI to edit a document's filter values afterward. Would be a small, self-contained addition on top of the existing `DocumentFilterValue` schema.
+- Discovered during Phase 3 testing, **pre-existing and unrelated to Phase 3**: `pdf-parse@1.1.1` (bundling a very old `pdfjs-dist` build) can throw spurious `bad XRef entry` / `Illegal character` errors on this Node version for some otherwise-valid PDFs, marking the upload `FAILED` even though the file itself is fine. Root cause looks like an old pdf.js incompatibility with newer V8/Buffer internals, not anything in the app's own code. Worth a closer look (or a `pdf-parse` alternative) separately from this feature.
+- `tesseract.js`'s `recognize()`/`createWorker()` requires an explicit `errorHandler` option — without one, a worker-side failure (e.g. an unreadable image) throws on the message port and crashes the whole Node process instead of just rejecting the call's promise. `ExtractionService.extractTextFromImagePath` passes a no-op handler to keep OCR failures contained to a per-document try/catch.
 
 ---
 
-## Immediate Next Steps (to open Phase 3)
+## Immediate Next Steps (to open Phase 4)
 
-1. Design the `FilterDefinition` / `DocumentFilterValue` schema and migrate (max 5 active filters).
-2. Build filter CRUD endpoints and turn `/admin/filters` into a real page.
-3. Surface custom filters on the upload form and the document list.
-4. Combine filters and search in a single query path.
-5. Add OCR for images (`tesseract.js` or similar) so images participate in search.
-6. Backlog carry-over from Phase 2: add an expiry to email verification tokens, and decide whether project deletion should route through the recycle bin.
+1. Add `archivedAt` to `Project` and design the OneDrive-style `active/` / `archived/` / `deleted/` storage layout.
+2. Wire up `ArchiveProjectModal`'s confirm handler and turn `/admin/archive` into a real page (archive, unarchive, download zip, permanent delete).
+3. Implement zip-on-archive / extract-on-unarchive against the storage abstraction (`BlobStore`).
+4. Add file compression for large files above the chosen threshold.
+5. Backlog carry-over: add an expiry to email verification tokens; decide whether project deletion should route through the recycle bin; add a UI to edit a document's custom filter values after upload; look into the pre-existing `pdf-parse` XRef/Illegal-character issue noted above.

@@ -15,7 +15,7 @@ Status: **complete**
 - User admin endpoints (list, create, get, set role)
 - PDF + image upload (JPEG, PNG) with project association
 - PDF text extraction
-- Image upload without extraction (OCR coming in Phase 3)
+- Image upload — OCR added in Phase 3, images now extracted like PDFs
 - Document status tracking
 - Status indicator badges in UI
 - Full-text search with snippets
@@ -58,13 +58,13 @@ Deferred to a later phase:
 
 ## Phase 3 – Custom Filters & Search
 
-Status: **not started** (static UI mock at `/admin/filters`)
+Status: **complete**
 
-- Admin-configurable custom filter fields (max 5)
-- Filter management page
-- Search + filter combined for precise lookup
-- OCR for images (pulled forward from Phase 5)
-- Document-date filtering replaces upload-date filtering
+- Admin-configurable custom filter fields (max 5) — `/admin/filters`
+- Filter management page (create, rename/retype, delete)
+- Search + filter combined for precise lookup (`mainFilter` + `customFilters`)
+- OCR for images via `tesseract.js` (pulled forward from Phase 5)
+- Filtering applies to the value entered for each filter (e.g. a `DATE` filter's own value), not upload date
 
 ---
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Document } from '../../types';
+import type { Document, DocumentFilterValue } from '../../types';
 import { downloadDocument, getDocumentBlob } from '../../api/exports';
+import { documentsService } from '../../api/documents';
 
 interface DocumentPreviewModalProps {
   document: Document;
@@ -12,7 +13,27 @@ export function DocumentPreviewModal({ document, onClose }: DocumentPreviewModal
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
+  const [filterValues, setFilterValues] = useState<DocumentFilterValue[]>(document.filterValues ?? []);
   const isImage = document.mimeType.startsWith('image/');
+
+  // The document list doesn't include custom filter values (kept lean); fetch the
+  // full document record here so the preview can show what was entered on upload.
+  useEffect(() => {
+    let isMounted = true;
+
+    documentsService
+      .getDocument(document.id)
+      .then((full) => {
+        if (isMounted) setFilterValues(full.filterValues ?? []);
+      })
+      .catch(() => {
+        // Non-critical — the preview still works without custom field values.
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [document.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -121,6 +142,25 @@ export function DocumentPreviewModal({ document, onClose }: DocumentPreviewModal
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-100 mt-1">{document.uploadDate}</p>
               </div>
             </div>
+
+            {filterValues.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-2">Custom Fields</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {filterValues.map((fv) => (
+                    <div
+                      key={fv.filterDefinitionId}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-3"
+                    >
+                      <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">{fv.name}</p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100 mt-1 break-words">
+                        {fv.value ?? '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/30 overflow-hidden h-[60vh] min-h-[460px]">
               {isPreviewLoading && (

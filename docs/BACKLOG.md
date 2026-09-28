@@ -7,7 +7,7 @@ Potential additions and improvements for future consideration.
 ## To Confirm With Stakeholder
 
 - Project-scoped visibility (non-admins see only assigned projects) — **implemented in code**, still needs explicit sign-off
-- Custom filters: available to all users vs creator-only — confirm before Phase 3
+- ~~Custom filters: available to all users vs creator-only~~ — **decided and implemented**: available to all users once created (`GET /filters` requires only authentication); only admins can create/edit/delete
 - Compression threshold (suggested 5MB) — needs concrete number
 - ~~Password policy specifics~~ — **decided and implemented**: min 10 chars, one uppercase, one lowercase, one digit, one special character
 - Upload size limit: Phase 2 calls for removing the 50MB cap entirely — confirm there should be no ceiling at all before removing it

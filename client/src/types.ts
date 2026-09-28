@@ -1,4 +1,12 @@
 export type DocumentStatus = 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
+export type FilterType = 'TEXT' | 'NUMBER' | 'DATE';
+
+export interface DocumentFilterValue {
+  filterDefinitionId: string;
+  name: string;
+  type: FilterType;
+  value: string | null;
+}
 
 export interface Document {
   id: string;
@@ -11,6 +19,7 @@ export interface Document {
   errorMessage?: string;
   pageCount?: number;
   extractedText?: string;
+  filterValues?: DocumentFilterValue[];
 }
 
 export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';

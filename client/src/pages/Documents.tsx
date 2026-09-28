@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import type { Document, DocumentStatus } from '../types';
 import { documentsService } from '../api/documents';
-import type { Document as ApiDocument } from '../api/documents';
+import type { Document as ApiDocument, CustomFilterQueryValue } from '../api/documents';
 import { projectsService, type Project } from '../api/projects';
+import { filtersService, type FilterDefinition } from '../api/filters';
 import { downloadDocument } from '../api/exports';
 import { DocumentTable } from '../components/documents/DocumentTable';
 import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal';
@@ -43,6 +44,7 @@ const convertApiDocument = (apiDoc: ApiDocument): Document => {
     errorMessage: apiDoc.errorMessage ?? undefined,
     pageCount: apiDoc.pageCount || undefined,
     extractedText: apiDoc.textPreview || undefined,
+    filterValues: apiDoc.filterValues,
   };
 };
 
@@ -71,19 +73,35 @@ export default function Documents() {
   const [sortBy, setSortBy] = useState<'upload-newest' | 'upload-oldest' | 'name-asc' | 'name-desc' | 'status'>('upload-newest');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [mainFilter, setMainFilter] = useState('');
-  const [supplierFilter, setSupplierFilter] = useState('');
-  const [materialTypeFilter, setMaterialTypeFilter] = useState('');
-  const [quantityFilter, setQuantityFilter] = useState('');
-  const [orderNumberFilter, setOrderNumberFilter] = useState('');
-  const [deliveryFromFilter, setDeliveryFromFilter] = useState('');
-  const [deliveryToFilter, setDeliveryToFilter] = useState('');
+  const [filterDefs, setFilterDefs] = useState<FilterDefinition[]>([]);
+  const [customFilterValues, setCustomFilterValues] = useState<Record<string, CustomFilterQueryValue>>({});
 
-  const materialTypeOptions = ['', 'Concrete', 'Steel', 'Lumber', 'Electrical', 'Plumbing'];
+  // Update (or clear, once fully empty) one custom filter's raw value(s).
+  const setCustomFilterValue = (filterId: string, patch: Partial<CustomFilterQueryValue>) => {
+    setCustomFilterValues((prev) => {
+      const merged = { ...prev[filterId], ...patch };
+      const next = { ...prev };
+      if (merged.value || merged.from || merged.to) {
+        next[filterId] = merged;
+      } else {
+        delete next[filterId];
+      }
+      return next;
+    });
+  };
+
   const statusFilter = useMemo(() => {
     const statusParam = searchParams.get('status');
     if (!statusParam) return undefined;
     return statusValues.has(statusParam as DocumentStatus) ? (statusParam as DocumentStatus) : undefined;
   }, [searchParams]);
+
+  useEffect(() => {
+    filtersService
+      .listFilters()
+      .then(setFilterDefs)
+      .catch((err) => console.error('Failed to fetch filters:', err));
+  }, []);
 
   useEffect(() => {
     sessionStorage.setItem(projectStorageKey, selectedProjectId);
@@ -109,12 +127,7 @@ export default function Documents() {
         const apiDocuments = await documentsService.listDocuments({
           projectId: selectedProjectId !== allProjectsValue ? selectedProjectId : undefined,
           mainFilter,
-          supplier: supplierFilter,
-          materialType: materialTypeFilter,
-          quantity: quantityFilter,
-          orderNumber: orderNumberFilter,
-          deliveryDateFrom: deliveryFromFilter,
-          deliveryDateTo: deliveryToFilter,
+          customFilters: customFilterValues,
           status: statusFilter,
           sortBy,
         });
@@ -130,18 +143,7 @@ export default function Documents() {
     };
 
     fetchDocuments();
-  }, [
-    selectedProjectId,
-    mainFilter,
-    supplierFilter,
-    materialTypeFilter,
-    quantityFilter,
-    orderNumberFilter,
-    deliveryFromFilter,
-    deliveryToFilter,
-    statusFilter,
-    sortBy,
-  ]);
+  }, [selectedProjectId, mainFilter, customFilterValues, statusFilter, sortBy]);
 
   // Fetch selected document details when ID is in URL
   useEffect(() => {
@@ -180,17 +182,16 @@ export default function Documents() {
   const activeFilterTags = [
     selectedProjectId !== allProjectsValue ? { key: 'project', label: `Project: ${selectedProjectName}` } : null,
     mainFilter ? { key: 'mainFilter', label: `Main: ${mainFilter}` } : null,
-    supplierFilter ? { key: 'supplier', label: `Supplier: ${supplierFilter}` } : null,
-    materialTypeFilter ? { key: 'materialType', label: `Material Type: ${materialTypeFilter}` } : null,
-    quantityFilter ? { key: 'quantity', label: `Quantity: ${quantityFilter}` } : null,
-    orderNumberFilter ? { key: 'orderNumber', label: `Order #: ${orderNumberFilter}` } : null,
+    ...filterDefs.map((def) => {
+      const raw = customFilterValues[def.id];
+      if (!raw) return null;
+      const label =
+        def.type === 'DATE'
+          ? `${def.name}: ${raw.from || 'Any'} to ${raw.to || 'Any'}`
+          : `${def.name}: ${raw.value}`;
+      return raw.value || raw.from || raw.to ? { key: `custom:${def.id}`, label } : null;
+    }),
     statusFilter ? { key: 'status', label: `Status: ${statusLabelMap[statusFilter]}` } : null,
-    deliveryFromFilter || deliveryToFilter
-      ? {
-          key: 'deliveryDate',
-          label: `Delivery: ${deliveryFromFilter || 'Any'} to ${deliveryToFilter || 'Any'}`,
-        }
-      : null,
   ].filter((tag): tag is { key: string; label: string } => Boolean(tag));
 
   const handleSelectDocument = (docId: string) => {
@@ -267,18 +268,18 @@ export default function Documents() {
   const removeFilterTag = (key: string) => {
     if (key === 'project') setSelectedProjectId(allProjectsValue);
     if (key === 'mainFilter') setMainFilter('');
-    if (key === 'supplier') setSupplierFilter('');
-    if (key === 'materialType') setMaterialTypeFilter('');
-    if (key === 'quantity') setQuantityFilter('');
-    if (key === 'orderNumber') setOrderNumberFilter('');
     if (key === 'status') {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('status');
       setSearchParams(nextParams);
     }
-    if (key === 'deliveryDate') {
-      setDeliveryFromFilter('');
-      setDeliveryToFilter('');
+    if (key.startsWith('custom:')) {
+      const filterId = key.slice('custom:'.length);
+      setCustomFilterValues((prev) => {
+        const next = { ...prev };
+        delete next[filterId];
+        return next;
+      });
     }
   };
 
@@ -376,75 +377,48 @@ export default function Documents() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Supplier</label>
-                  <input
-                    type="text"
-                    value={supplierFilter}
-                    onChange={(e) => setSupplierFilter(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                    placeholder="e.g. Acme Materials"
-                  />
-                </div>
+                {filterDefs.map((def) => {
+                  const raw = customFilterValues[def.id] ?? {};
+                  if (def.type === 'DATE') {
+                    return (
+                      <div key={def.id}>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                          {def.name} (range)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={raw.from ?? ''}
+                            onChange={(e) => setCustomFilterValue(def.id, { from: e.target.value })}
+                            className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
+                          />
+                          <span className="text-slate-500">to</span>
+                          <input
+                            type="date"
+                            value={raw.to ?? ''}
+                            onChange={(e) => setCustomFilterValue(def.id, { to: e.target.value })}
+                            className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Material Type</label>
-                  <select
-                    value={materialTypeFilter}
-                    onChange={(e) => setMaterialTypeFilter(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                  >
-                    <option value="">All Material Types</option>
-                    {materialTypeOptions
-                      .filter((option) => option)
-                      .map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Quantity</label>
-                  <input
-                    type="text"
-                    value={quantityFilter}
-                    onChange={(e) => setQuantityFilter(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                    placeholder="e.g. 500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Order Number</label>
-                  <input
-                    type="text"
-                    value={orderNumberFilter}
-                    onChange={(e) => setOrderNumberFilter(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                    placeholder="e.g. PO-2026-114"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Delivery Date (range)</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="date"
-                      value={deliveryFromFilter}
-                      onChange={(e) => setDeliveryFromFilter(e.target.value)}
-                      className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                    />
-                    <span className="text-slate-500">to</span>
-                    <input
-                      type="date"
-                      value={deliveryToFilter}
-                      onChange={(e) => setDeliveryToFilter(e.target.value)}
-                      className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                    />
-                  </div>
-                </div>
+                  return (
+                    <div key={def.id}>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                        {def.name}
+                      </label>
+                      <input
+                        type={def.type === 'NUMBER' ? 'number' : 'text'}
+                        value={raw.value ?? ''}
+                        onChange={(e) => setCustomFilterValue(def.id, { value: e.target.value })}
+                        className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
+                        placeholder={def.type === 'NUMBER' ? 'e.g. 500' : `Enter ${def.name.toLowerCase()}`}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -454,12 +428,7 @@ export default function Documents() {
                   onClick={() => {
                     setSelectedProjectId(allProjectsValue);
                     setMainFilter('');
-                    setSupplierFilter('');
-                    setMaterialTypeFilter('');
-                    setQuantityFilter('');
-                    setOrderNumberFilter('');
-                    setDeliveryFromFilter('');
-                    setDeliveryToFilter('');
+                    setCustomFilterValues({});
                   }}
                   className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary"
                 >

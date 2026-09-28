@@ -1,7 +1,16 @@
+import type { FilterType } from './filters';
+
 // API base URL from environment variable
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export type DocumentStatus = 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
+
+export interface DocumentFilterValue {
+  filterDefinitionId: string;
+  name: string;
+  type: FilterType;
+  value: string | null;
+}
 
 export interface Document {
   id: string;
@@ -17,17 +26,21 @@ export interface Document {
   extractedAt?: string | null;
   pageCount?: number | null;
   textPreview?: string | null;
+  filterValues?: DocumentFilterValue[];
+}
+
+/** Raw value(s) submitted for one custom filter in a document list/search query. */
+export interface CustomFilterQueryValue {
+  value?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface ListDocumentsFilters {
   projectId?: string;
   mainFilter?: string;
-  supplier?: string;
-  materialType?: string;
-  quantity?: string;
-  orderNumber?: string;
-  deliveryDateFrom?: string;
-  deliveryDateTo?: string;
+  /** Keyed by FilterDefinition id — see filters.ts. */
+  customFilters?: Record<string, CustomFilterQueryValue>;
   status?: DocumentStatus;
   sortBy?: 'upload-newest' | 'upload-oldest' | 'name-asc' | 'name-desc' | 'status';
 }
@@ -45,12 +58,39 @@ export interface UploadResponse {
   status: DocumentStatus;
 }
 
+/** Builds the query string shared by listDocuments and getStatusCounts. */
+function buildListDocumentsParams(
+  filters: ListDocumentsFilters | undefined,
+  options: { includeStatusAndSort: boolean },
+): URLSearchParams {
+  const params = new URLSearchParams();
+  if (!filters) return params;
+
+  if (filters.projectId) params.set('projectId', filters.projectId);
+  if (filters.mainFilter && filters.mainFilter.trim() !== '') {
+    params.set('mainFilter', filters.mainFilter);
+  }
+  if (filters.customFilters && Object.keys(filters.customFilters).length > 0) {
+    params.set('customFilters', JSON.stringify(filters.customFilters));
+  }
+  if (options.includeStatusAndSort) {
+    if (filters.status) params.set('status', filters.status);
+    if (filters.sortBy) params.set('sortBy', filters.sortBy);
+  }
+
+  return params;
+}
+
 // Documents API service
 export const documentsService = {
   /**
    * Upload a PDF file
    */
-  async uploadDocument(file: File, projectId: string): Promise<UploadResponse> {
+  async uploadDocument(
+    file: File,
+    projectId: string,
+    filterValues?: Record<string, string>,
+  ): Promise<UploadResponse> {
     const accessToken = sessionStorage.getItem('accessToken');
     if (!accessToken) {
       throw new Error('Not authenticated');
@@ -59,6 +99,9 @@ export const documentsService = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('projectId', projectId);
+    if (filterValues && Object.keys(filterValues).length > 0) {
+      formData.append('filterValues', JSON.stringify(filterValues));
+    }
 
     const response = await fetch(`${API_URL}/documents/upload`, {
       method: 'POST',
@@ -96,15 +139,7 @@ export const documentsService = {
       throw new Error('Not authenticated');
     }
 
-    const params = new URLSearchParams();
-    if (filters) {
-      const entries = Object.entries(filters) as Array<[keyof ListDocumentsFilters, string | undefined]>;
-      for (const [key, value] of entries) {
-        if (value && value.trim() !== '') {
-          params.set(key, value);
-        }
-      }
-    }
+    const params = buildListDocumentsParams(filters, { includeStatusAndSort: true });
 
     const queryString = params.toString();
     const url = queryString ? `${API_URL}/documents?${queryString}` : `${API_URL}/documents`;
@@ -133,18 +168,7 @@ export const documentsService = {
       throw new Error('Not authenticated');
     }
 
-    const params = new URLSearchParams();
-    if (filters) {
-      const entries = Object.entries(filters) as Array<[keyof ListDocumentsFilters, string | undefined]>;
-      for (const [key, value] of entries) {
-        if (key === 'status' || key === 'sortBy') {
-          continue;
-        }
-        if (value && value.trim() !== '') {
-          params.set(key, value);
-        }
-      }
-    }
+    const params = buildListDocumentsParams(filters, { includeStatusAndSort: false });
 
     const queryString = params.toString();
     const url = queryString ? `${API_URL}/documents/status-counts?${queryString}` : `${API_URL}/documents/status-counts`;
