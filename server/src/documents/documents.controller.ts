@@ -57,7 +57,12 @@ export class DocumentsController {
       );
     }
 
-    return this.documentsService.uploadDocument(userId, file, dto.projectId);
+    return this.documentsService.uploadDocument(
+      userId,
+      file,
+      dto.projectId,
+      dto.filterValues,
+    );
   }
 
   /**

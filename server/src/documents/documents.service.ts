@@ -9,7 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtractionService } from './extraction.service';
 import { BLOB_STORE, type BlobStore } from '../storage/blob-store.interface';
-import { DocumentStatus, UserRole, type Prisma } from '@prisma/client';
+import { DocumentStatus, UserRole, type FilterDefinition, type Prisma } from '@prisma/client';
 import {
   type DocumentsSortBy,
   type ListDocumentsQueryDto,
@@ -18,6 +18,13 @@ import {
   toActiveStorageKey,
   toDeletedStorageKey,
 } from '../common/deletion.constants';
+import {
+  buildCustomFilterWhereClauses,
+  parseQueryCustomFilters,
+  parseUploadFilterValues,
+  toDocumentFilterValueCreateData,
+  validateFilterValues,
+} from './filter-values.util';
 
 // Documents business logic
 @Injectable()
@@ -37,6 +44,7 @@ export class DocumentsService {
     userId: string,
     file: Express.Multer.File,
     projectId?: string,
+    rawFilterValues?: string,
   ): Promise<{ id: string; status: DocumentStatus }> {
     let documentId: string | undefined;
 
@@ -44,6 +52,18 @@ export class DocumentsService {
       if (!projectId) {
         throw new BadRequestException('projectId is required');
       }
+
+      // Validate custom filter values up front (before any writes) so a bad value
+      // (e.g. non-numeric input for a NUMBER filter) fails cleanly with a 400.
+      const filterValuesInput = parseUploadFilterValues(rawFilterValues);
+      const filterDefinitions =
+        Object.keys(filterValuesInput).length > 0
+          ? await this.prisma.filterDefinition.findMany()
+          : [];
+      const typedFilterValues = validateFilterValues(
+        filterDefinitions,
+        filterValuesInput,
+      );
 
       const project = await this.prisma.project.findFirst({
         where: { id: projectId, deletedAt: null },
@@ -97,6 +117,12 @@ export class DocumentsService {
 
       documentId = document.id;
 
+      if (typedFilterValues.length > 0) {
+        await this.prisma.documentFilterValue.createMany({
+          data: toDocumentFilterValueCreateData(document.id, typedFilterValues),
+        });
+      }
+
       // Save file to storage
       const { storageKey } = await this.blobStore.saveFile(
         userId,
@@ -136,6 +162,36 @@ export class DocumentsService {
             pageCount,
           },
         });
+      } else if (
+        file.mimetype === 'image/jpeg' ||
+        file.mimetype === 'image/png'
+      ) {
+        // OCR for images (Phase 3) so they participate in full-text search.
+        // A failed OCR pass must not fail the whole upload — the file itself is
+        // fine, only its searchable text is unavailable — so errors are logged
+        // and swallowed rather than propagated to the outer catch below.
+        await this.prisma.document.update({
+          where: { id: document.id },
+          data: { status: DocumentStatus.PROCESSING },
+        });
+
+        try {
+          const filePath = this.blobStore.getPath(storageKey);
+          const { text: extractedText } =
+            await this.extractionService.extractTextFromImagePath(filePath);
+
+          if (extractedText.trim().length > 0) {
+            await this.prisma.documentText.upsert({
+              where: { documentId: document.id },
+              create: { documentId: document.id, extractedText },
+              update: { extractedText },
+            });
+          }
+        } catch (ocrError) {
+          this.logger.warn(
+            `OCR failed for document ${document.id}: ${String(ocrError)}`,
+          );
+        }
       }
 
       // Mark as processed
@@ -199,6 +255,13 @@ export class DocumentsService {
             pageCount: true,
           },
         },
+        filterValues: {
+          include: {
+            filterDefinition: {
+              select: { id: true, name: true, type: true },
+            },
+          },
+        },
       },
     });
 
@@ -223,6 +286,15 @@ export class DocumentsService {
       extractedAt: document.text?.extractedAt || null,
       pageCount: document.text?.pageCount || null,
       textPreview,
+      filterValues: document.filterValues.map((value) => ({
+        filterDefinitionId: value.filterDefinition.id,
+        name: value.filterDefinition.name,
+        type: value.filterDefinition.type,
+        value:
+          value.valueText ??
+          (value.valueNumber !== null ? String(value.valueNumber) : null) ??
+          (value.valueDate ? value.valueDate.toISOString() : null),
+      })),
     };
   }
 
@@ -250,6 +322,7 @@ export class DocumentsService {
     options: {
       includeStatus?: boolean;
       allowedProjectIds?: string[] | null;
+      filterDefinitions?: FilterDefinition[];
     } = {},
   ): Prisma.DocumentWhereInput {
     const whereClauses: Prisma.DocumentWhereInput[] = [];
@@ -268,29 +341,20 @@ export class DocumentsService {
       whereClauses.push({ projectId: query.projectId });
     }
 
-    const textTerms = [
-      query.mainFilter,
-      query.supplier,
-      query.materialType,
-      query.quantity,
-      query.orderNumber,
-    ]
-      .map((term) => term?.trim())
-      .filter((term): term is string => Boolean(term));
-
-    for (const term of textTerms) {
+    const mainFilterTerm = query.mainFilter?.trim();
+    if (mainFilterTerm) {
       whereClauses.push({
         OR: [
           {
             originalFilename: {
-              contains: term,
+              contains: mainFilterTerm,
             },
           },
           {
             text: {
               is: {
                 extractedText: {
-                  contains: term,
+                  contains: mainFilterTerm,
                 },
               },
             },
@@ -299,23 +363,12 @@ export class DocumentsService {
       });
     }
 
-    // Until a dedicated deliveryDate field exists, date range applies to upload date.
-    const uploadDateFilter: Prisma.DateTimeFilter = {};
-    if (query.deliveryDateFrom) {
-      const fromDate = new Date(query.deliveryDateFrom);
-      if (!Number.isNaN(fromDate.getTime())) {
-        uploadDateFilter.gte = fromDate;
-      }
-    }
-    if (query.deliveryDateTo) {
-      const toDate = new Date(query.deliveryDateTo);
-      if (!Number.isNaN(toDate.getTime())) {
-        toDate.setHours(23, 59, 59, 999);
-        uploadDateFilter.lte = toDate;
-      }
-    }
-    if (Object.keys(uploadDateFilter).length > 0) {
-      whereClauses.push({ uploadedAt: uploadDateFilter });
+    // Admin-configurable custom filters (Phase 3) — one AND-clause per active filter.
+    const customFilters = parseQueryCustomFilters(query.customFilters);
+    if (Object.keys(customFilters).length > 0 && options.filterDefinitions) {
+      whereClauses.push(
+        ...buildCustomFilterWhereClauses(options.filterDefinitions, customFilters),
+      );
     }
 
     if (options.includeStatus !== false && query.status) {
@@ -323,6 +376,17 @@ export class DocumentsService {
     }
 
     return whereClauses.length > 0 ? { AND: whereClauses } : {};
+  }
+
+  /**
+   * Fetch filter definitions only when the query actually references custom filters,
+   * to avoid an unnecessary query on the (very common) unfiltered case.
+   */
+  private async getFilterDefinitionsIfNeeded(
+    query: ListDocumentsQueryDto,
+  ): Promise<FilterDefinition[]> {
+    if (!query.customFilters) return [];
+    return this.prisma.filterDefinition.findMany();
   }
 
   /**
@@ -342,7 +406,11 @@ export class DocumentsService {
       userId,
       user.role,
     );
-    const where = this.buildDocumentsWhere(query, { allowedProjectIds });
+    const filterDefinitions = await this.getFilterDefinitionsIfNeeded(query);
+    const where = this.buildDocumentsWhere(query, {
+      allowedProjectIds,
+      filterDefinitions,
+    });
 
     const orderBy = this.getDocumentsOrderBy(query.sortBy);
 
@@ -400,9 +468,11 @@ export class DocumentsService {
       userId,
       user.role,
     );
+    const filterDefinitions = await this.getFilterDefinitionsIfNeeded(query);
     const where = this.buildDocumentsWhere(query, {
       includeStatus: false,
       allowedProjectIds,
+      filterDefinitions,
     });
 
     const rows = await this.prisma.document.groupBy({

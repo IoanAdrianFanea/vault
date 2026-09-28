@@ -46,7 +46,8 @@
     "passport-jwt": "^4.0.1",
     "pdf-parse": "^1.1.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -92,5 +93,13 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "allowScripts": {
+    "@nestjs/core@11.1.14": true,
+    "@prisma/engines@7.4.2": true,
+    "argon2@0.44.0": true,
+    "better-sqlite3@12.6.2": true,
+    "prisma@7.4.2": true,
+    "unrs-resolver@1.11.1": true
   }
 }

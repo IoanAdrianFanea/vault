@@ -13,33 +13,18 @@ export class ListDocumentsQueryDto {
   @IsString()
   projectId?: string;
 
+  /** Free-text search across filename and extracted document text. */
   @IsOptional()
   @IsString()
   mainFilter?: string;
 
+  /**
+   * JSON-encoded map of `{ [filterDefinitionId]: { value?, from?, to? } }` for the
+   * admin-configurable custom filter fields (Phase 3). See filter-values.util.ts.
+   */
   @IsOptional()
   @IsString()
-  supplier?: string;
-
-  @IsOptional()
-  @IsString()
-  materialType?: string;
-
-  @IsOptional()
-  @IsString()
-  quantity?: string;
-
-  @IsOptional()
-  @IsString()
-  orderNumber?: string;
-
-  @IsOptional()
-  @IsString()
-  deliveryDateFrom?: string;
-
-  @IsOptional()
-  @IsString()
-  deliveryDateTo?: string;
+  customFilters?: string;
 
   @IsOptional()
   @IsEnum(DocumentStatus)

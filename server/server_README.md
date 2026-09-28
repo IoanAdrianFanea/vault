@@ -8,7 +8,8 @@ NestJS backend for the Construction Document Indexer.
 - Prisma ORM with SQLite (better-sqlite3)
 - JWT (access + refresh token rotation)
 - Argon2 password hashing
-- pdf-parse for text extraction
+- pdf-parse for PDF text extraction
+- tesseract.js for image OCR (JPEG/PNG)
 - archiver for ZIP export
 - nodemailer for verification and admin-notification emails
 
@@ -64,14 +65,24 @@ npm run test:cov         # coverage report
 src/
 ├── auth/           JWT auth, refresh tokens, register/verify-email/login/logout/me,
 │                   own-profile update, own-password change, password policy decorator
-├── documents/      Upload, list, status counts, search, text, download, delete, bulk-delete
+├── documents/      Upload, list, status counts, search, text, download, delete, bulk-delete,
+│                   PDF text extraction + image OCR, custom filter value validation/query building
 ├── email/          Nodemailer transport — verification and admin-notification emails
 ├── exports/        Single-file download and ZIP export of selected documents
+├── filters/        Admin-configurable custom filter fields (FilterDefinition CRUD, max 5 active)
 ├── prisma/         PrismaService wrapper
 ├── projects/       Project CRUD and membership management
 ├── storage/        BlobStore interface + LocalBlobStore implementation
 └── users/          Admin user management, account status (approve/reject), roles
 ```
+
+## Custom Filters & OCR (Phase 3)
+
+- Admins manage up to 5 custom filter fields (`TEXT` / `NUMBER` / `DATE`) at `/admin/filters` (`FiltersModule`, `GET /filters` open to any authenticated user, create/update/delete admin-only).
+- Values are entered once at upload time (`POST /documents/upload` accepts a `filterValues` form field: JSON `{ [filterDefinitionId]: "raw value" }`) and stored in `DocumentFilterValue`, typed to match the filter's declared type.
+- The document list/search endpoints accept a `customFilters` query param (JSON `{ [filterDefinitionId]: { value?, from?, to? } }`) that combines with the existing `mainFilter` free-text search.
+- Images (JPEG/PNG) are OCR'd via `tesseract.js` on upload so their text becomes searchable like PDFs. `tesseract.js` downloads its English language model (`eng.traineddata`, a few MB) to the working directory the first time OCR runs — this requires outbound internet access on first use; subsequent runs reuse the cached file.
+- OCR failures (e.g. a corrupt or unreadable image) are caught and logged rather than failing the upload — the document still ends up `PROCESSED` with no extracted text.
 
 ## File Storage
 

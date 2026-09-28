@@ -32,6 +32,7 @@ model User {
   deletionLogs  DeletionLog[]  @relation("DeletedBy")
   deletedProjects Project[]    @relation("ProjectDeletedBy")
   accountStatus  AccountStatus  @default(PENDING)
+  createdFilterDefinitions FilterDefinition[] @relation("FilterDefinitionCreatedBy")
 }
 
 model Project {
@@ -95,10 +96,47 @@ model Document {
   deletedAt        DateTime?
 
   text             DocumentText?
+  filterValues     DocumentFilterValue[]
 
   @@index([projectId])
   @@index([uploadedById])
   @@index([deletedAt])
+}
+
+/// Admin-configurable custom filter field (Phase 3). Capped at 5 active definitions
+/// by FiltersService; every user can read the list, only admins can manage it.
+model FilterDefinition {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  type        FilterType
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  createdById String?
+  createdBy   User?      @relation("FilterDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  values      DocumentFilterValue[]
+
+  @@index([order])
+}
+
+/// A single document's value for one custom filter field.
+/// Only the column matching the parent FilterDefinition.type is populated;
+/// the others stay null. Deleting the FilterDefinition cascades here.
+model DocumentFilterValue {
+  id                 String           @id @default(cuid())
+  documentId         String
+  document           Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  filterDefinitionId String
+  filterDefinition   FilterDefinition @relation(fields: [filterDefinitionId], references: [id], onDelete: Cascade)
+  valueText          String?
+  valueNumber        Float?
+  valueDate          DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([documentId, filterDefinitionId])
+  @@index([filterDefinitionId])
 }
 
 /// Audit trail for document deletions.
@@ -151,4 +189,10 @@ enum AccountStatus {
   PENDING
   ACTIVE
   REJECTED
+}
+
+enum FilterType {
+  TEXT
+  NUMBER
+  DATE
 }

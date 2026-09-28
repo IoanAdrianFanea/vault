@@ -9,6 +9,7 @@ import { ExportsModule } from './exports/exports.module';
 import { ProjectsModule } from './projects/projects.module';
 import { EmailModule } from './email/email.module';
 import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
+import { FiltersModule } from './filters/filters.module';
 import path from 'path';
 
 @Module({
@@ -26,6 +27,7 @@ import path from 'path';
     ProjectsModule,
     EmailModule,
     RecycleBinModule,
+    FiltersModule,
   ],
   controllers: [],
   providers: [],
