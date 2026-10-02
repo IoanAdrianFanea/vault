@@ -6,7 +6,7 @@ A multi-user document indexing and retrieval tool for construction operations te
 
 ## Current Position
 
-**Phases 2 and 3 are complete. Phase 4 is next.**
+**Phases 2, 3, and 4 are complete. Phase 5 is next.**
 
 All four Phase 2 workstreams are built and wired end to end:
 
@@ -17,9 +17,11 @@ All four Phase 2 workstreams are built and wired end to end:
 
 The smaller Phase 2 items are closed too: the 50MB upload limit is gone, users can change their own email address (with re-verification), `GET /projects` is membership-scoped for non-admins, and the Register page now sends the full name it collects.
 
-Phase 3 (custom filters, combined search+filter, OCR for images) is now built end to end — see the Phase 3 section below.
+Phase 3 (custom filters, combined search+filter, OCR for images) is now built end to end.
 
-Phases 4–7 are not started. The `/admin/archive` and `/jobs` pages exist in the frontend as **static mock previews** of Phases 4 and 6 — they render hard-coded data and call no API.
+Phase 4 (project archive, zip storage, recycle-bin integration, transparent compression, and project-based storage layout) is now built end to end.
+
+Phases 5–7 are not started. The `/jobs` page exists in the frontend as a **static mock preview** of Phase 6.
 
 ---
 
@@ -178,28 +180,33 @@ Known gap: renaming a filter is safe, but changing its **type** discards previou
 
 ## Phase 4 – Archive & Storage Structure
 
-Status: **not started** — UI mock exists
+Status: **complete**
 
-The `/admin/archive` page and `ArchiveProjectModal` exist but are presentational only — the modal has no confirm handler and the page renders hard-coded rows. `Project` has no `archivedAt` column.
+`/admin/archive` is a fully functional admin management page, backed by the `ArchiveModule` on the server.
 
-### Project Archive
-- Admin can archive a project from the project management page
-- On archive: all project files zipped, `archivedAt` set
-- On unarchive: zip extracted, files restored to original structure, `archivedAt` cleared
-- Dedicated archive page lists archived projects
-- Admin can download zip without unarchiving
-- Admin can permanently delete archived projects
+### Project Archive — complete
+| Item | Status | Notes |
+|---|---|---|
+| Admin can archive a project from project management | ✅ done | `ArchiveProjectModal` wired to `POST /archive/:id` with missing file detection |
+| On archive: project files zipped, `archivedAt` stamped | ✅ done | Stored in `archived/{projectId}.zip` with `manifest.json`; in-progress claim prevents race conditions |
+| On unarchive: zip extracted, files restored, `archivedAt` cleared | ✅ done | `POST /archive/:id/restore` extracts manifest entries back to `active/{projectId}/` |
+| Dedicated archive page lists archived projects | ✅ done | `/admin/archive` displays project, date, actor, size, document count, and client search |
+| Admin can download zip without unarchiving | ✅ done | `GET /archive/:id/download` streams archive zip with sanitised filename |
+| Admin can delete archived projects | ✅ done | Routes through the 30-day recycle bin (`deleted/{projectId}/archive.zip`); restoring returns project to archive |
 
-### OneDrive Storage Structure
-- Root folder configurable by admin
-- Inside root:
-  - `active/` — folder per project containing live files
-  - `archived/` — zip per archived project
-  - `deleted/` — folder per project containing soft-deleted files (during 30-day window)
+### Project-Based Storage Structure — complete
+| Item | Status | Notes |
+|---|---|---|
+| Root folder configurable by environment | ✅ done | `STORAGE_ROOT` in `.env` (defaults to `./data`) |
+| Inside root: active, archived, and deleted layout | ✅ done | `active/{projectId}/`, `archived/{projectId}.zip`, `deleted/{projectId}/` |
+| One-off storage layout migration script | ✅ done | `npm run storage:migrate` moves legacy files and updates document storage keys |
 
-### File Compression
-- Large files compressed before storage (threshold to be defined, suggested 5MB+)
-- Compression applied where it reduces size meaningfully (PDFs and JPEGs are already compressed, may skip)
+### File Compression — complete
+| Item | Status | Notes |
+|---|---|---|
+| Large files evaluated for gzip compression before storage | ✅ done | `COMPRESSION_THRESHOLD_BYTES` (5MB default) |
+| Compression applied only when saving space meaningfully | ✅ done | `COMPRESSION_MIN_SAVINGS_RATIO` (10% default); key gets `.gz` suffix |
+| Transparent read decompression | ✅ done | `BlobStore.readFile` and `createReadStream` decompress automatically |
 
 ---
 
@@ -245,26 +252,26 @@ Status: **not started**
 
 ## Known Technical Notes
 
-- Storage key format is `{userId}/{documentId}.{ext}` where ext is derived from mime type, and `deleted/{userId}/{documentId}.{ext}` while a document sits in the recycle bin. Will change to project-based keys in Phase 4.
+- Storage key format is `active/{projectId}/{documentId}.{ext}[.gz]`, and `deleted/{projectId}/{documentId}.{ext}[.gz]` while a document sits in the recycle bin.
 - The `/jobs` route exists in the frontend as a mock-data preview of Phase 6 functionality. Its banner incorrectly says "Phase 3 – Async Processing"; async processing is Phase 6.
-- `/admin/archive` is likewise a mock-data preview of Phase 4. `/admin/filters` is now real (Phase 3).
+- `/admin/archive` and `/admin/filters` are both real, fully wired pages (Phases 3 and 4).
 - `User` has `language`, `timezone` fields that are unused. Candidates for removal — see backlog.
 - Search loads every accessible document with extracted text into memory and filters in JavaScript (`searchDocuments`). Fine at current scale, but it will need a SQL/FTS rewrite before real data volumes.
 - `listDocuments` is hard-capped at 50 rows with no pagination, and search at 20.
 - `AuthService.refresh` matches the most recent non-revoked token for the user rather than looking up the presented token, so concurrent sessions on multiple devices can invalidate each other.
 - `POST /projects` has no membership bootstrap — a newly created project has no members until an admin adds them.
-- Deleting a project still hard-deletes its documents by cascade, bypassing the recycle bin. Only per-document deletion is recoverable.
+- Deleting a project soft-deletes its documents to the recycle bin for 30-day recovery.
 - The purge task runs in-process on a single API instance. If the API is ever scaled out, every instance will run it — the conditional-delete claim makes that safe, but it is wasted work.
 - Custom filter values are entered once at upload time; there is no UI to edit a document's filter values afterward. Would be a small, self-contained addition on top of the existing `DocumentFilterValue` schema.
 - Discovered during Phase 3 testing, **pre-existing and unrelated to Phase 3**: `pdf-parse@1.1.1` (bundling a very old `pdfjs-dist` build) can throw spurious `bad XRef entry` / `Illegal character` errors on this Node version for some otherwise-valid PDFs, marking the upload `FAILED` even though the file itself is fine. Root cause looks like an old pdf.js incompatibility with newer V8/Buffer internals, not anything in the app's own code. Worth a closer look (or a `pdf-parse` alternative) separately from this feature.
-- `tesseract.js`'s `recognize()`/`createWorker()` requires an explicit `errorHandler` option — without one, a worker-side failure (e.g. an unreadable image) throws on the message port and crashes the whole Node process instead of just rejecting the call's promise. `ExtractionService.extractTextFromImagePath` passes a no-op handler to keep OCR failures contained to a per-document try/catch.
+- `tesseract.js`'s `recognize()`/`createWorker()` requires an explicit `errorHandler` option — without one, a worker-side failure (e.g. an unreadable image) throws on the message port and crashes the whole Node process instead of just rejecting the call's promise. `ExtractionService.extractTextFromImageBuffer` passes a no-op handler to keep OCR failures contained to a per-document try/catch.
 
 ---
 
-## Immediate Next Steps (to open Phase 4)
+## Immediate Next Steps (to open Phase 5)
 
-1. Add `archivedAt` to `Project` and design the OneDrive-style `active/` / `archived/` / `deleted/` storage layout.
-2. Wire up `ArchiveProjectModal`'s confirm handler and turn `/admin/archive` into a real page (archive, unarchive, download zip, permanent delete).
-3. Implement zip-on-archive / extract-on-unarchive against the storage abstraction (`BlobStore`).
-4. Add file compression for large files above the chosen threshold.
-5. Backlog carry-over: add an expiry to email verification tokens; decide whether project deletion should route through the recycle bin; add a UI to edit a document's custom filter values after upload; look into the pre-existing `pdf-parse` XRef/Illegal-character issue noted above.
+1. Set up HTTPS and deployment environment.
+2. Implement OneDrive storage provider implementing `BlobStore` (replaces `LocalBlobStore`).
+3. Add structured logging across the application.
+4. Establish backup strategy for database and blob storage.
+5. Backlog carry-over: add an expiry to email verification tokens; add a UI to edit a document's custom filter values after upload.

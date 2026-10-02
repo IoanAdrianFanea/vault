@@ -12,6 +12,8 @@ export interface DeletedDocument {
   deletedByName: string | null;
   daysRemaining: number;
   retentionDays: number;
+  restorable: boolean;
+  requiresProjectChoice: boolean;
 }
 
 function authHeaders(): Record<string, string> {
@@ -31,6 +33,7 @@ export interface DeletedProject {
   documentCount: number;
   daysRemaining: number;
   retentionDays: number;
+  isArchived: boolean;
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {

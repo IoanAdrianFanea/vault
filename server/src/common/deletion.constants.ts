@@ -1,30 +1,14 @@
 /**
  * Soft delete / recycle bin retention rules.
- * Shared by DocumentsService (soft delete), RecycleBinService (restore, purge)
- * and the scheduled purge task so the window is defined in exactly one place.
+ * Shared by RecycleBinService (restore, purge) and the scheduled purge task
+ * so the window is defined in exactly one place.
+ * Storage key rules now live in storage/storage-keys.ts.
  */
 
 /** Days a soft-deleted document remains restorable before permanent deletion. */
 export const DELETION_RETENTION_DAYS = 30;
 
-/** Storage key prefix for the holding area soft-deleted files are moved to. */
-export const DELETED_KEY_PREFIX = 'deleted/';
-
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/** Storage key a document's file is moved to when it is soft deleted. */
-export function toDeletedStorageKey(storageKey: string): string {
-  return storageKey.startsWith(DELETED_KEY_PREFIX)
-    ? storageKey
-    : `${DELETED_KEY_PREFIX}${storageKey}`;
-}
-
-/** Storage key a document's file is moved back to when it is restored. */
-export function toActiveStorageKey(storageKey: string): string {
-  return storageKey.startsWith(DELETED_KEY_PREFIX)
-    ? storageKey.slice(DELETED_KEY_PREFIX.length)
-    : storageKey;
-}
 
 /** Documents soft-deleted before this instant are eligible for permanent deletion. */
 export function getPurgeCutoff(now: Date = new Date()): Date {

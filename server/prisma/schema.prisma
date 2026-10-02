@@ -31,6 +31,7 @@ model User {
   refreshTokens RefreshToken[]
   deletionLogs  DeletionLog[]  @relation("DeletedBy")
   deletedProjects Project[]    @relation("ProjectDeletedBy")
+  archivedProjects Project[]   @relation("ProjectArchivedBy")
   accountStatus  AccountStatus  @default(PENDING)
   createdFilterDefinitions FilterDefinition[] @relation("FilterDefinitionCreatedBy")
 }
@@ -48,10 +49,25 @@ model Project {
   deletedBy      User?             @relation("ProjectDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   deletedByEmail String?
 
+  /// Archive state (Phase 4).
+  /// Derived project lifecycles:
+  /// - Active: deletedAt == null && archivedAt == null
+  /// - Archived: archivedAt != null && deletedAt == null
+  /// - Deleted-from-Active: deletedAt != null && archivedAt == null
+  /// - Deleted-from-Archived: deletedAt != null && archivedAt != null (archivedAt stays set while in recycle bin so restore returns to Archived)
+  archivedAt                DateTime?
+  archivedById              String?
+  archivedBy                User?             @relation("ProjectArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  archivedByEmail           String?
+  archiveSizeBytes          BigInt?
+  archiveOperation          ArchiveOperation?
+  archiveOperationStartedAt DateTime?
+
   memberships ProjectMembership[]
   documents   Document[]
 
   @@index([deletedAt])
+  @@index([archivedAt])
 }
 
 model ProjectMembership {
@@ -178,6 +194,12 @@ enum DocumentStatus {
   PROCESSING
   PROCESSED
   FAILED
+}
+
+enum ArchiveOperation {
+  ARCHIVING
+  UNARCHIVING
+  DELETING
 }
 
 enum UserRole {

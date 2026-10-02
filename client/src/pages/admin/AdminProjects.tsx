@@ -33,6 +33,10 @@ export default function AdminProjects() {
     setProjects((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const handleArchived = (id: string) => {
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+  };
+
   const handleMembersUpdated = (id: string, addedCount: number) => {
     setProjects((prev) =>
       prev.map((p) =>
@@ -78,8 +82,10 @@ export default function AdminProjects() {
       />
       <ArchiveProjectModal
         isOpen={archivingProject !== null}
+        projectId={archivingProject?.id ?? ''}
         projectName={archivingProject?.name ?? ''}
         onClose={() => setArchivingProject(null)}
+        onArchived={handleArchived}
       />
       <div className="bg-surface pt-6 px-10 shrink-0 sticky top-0 z-10">
         <AdminTabs />

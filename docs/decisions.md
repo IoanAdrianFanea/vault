@@ -83,15 +83,17 @@ Deleted documents are not removed immediately. They are marked deleted, logged, 
 
 Rationale: deletion mistakes happen. A 30-day window lets admins restore accidentally deleted files without needing backups. Logging provides audit history.
 
-Status: **not implemented**. Deletion is currently immediate, permanent and admin-only. This is the last outstanding workstream in Phase 2.
+Status: **implemented** (Phase 2 & Phase 4). Deletions move files to `deleted/`, create `DeletionLog` entries, and are recoverable for 30 days.
 
 ---
 
 ## Project Archive with Zip Storage
 
-When a project is archived, all files are zipped. The project becomes inaccessible from main views but the zip is downloadable. Unarchive extracts the zip and restores the original structure.
+When a project is archived, all files are zipped. The project becomes inaccessible from main views (including for admins) and is read-only, but the zip is downloadable. Unarchive extracts the zip and restores the original structure.
 
-Rationale: completed projects don't need to clutter the working view. Zipping reduces storage and signals immutability. Reversibility matters because work sometimes resumes on "completed" projects.
+Deleting an archived project routes through the 30-day recycle bin rather than immediate purge; restoring an archived project returns it to the archive.
+
+Rationale: completed projects don't need to clutter the working view. Zipping reduces storage and signals immutability. Reversibility matters because work sometimes resumes on "completed" projects. Preserving the 30-day recycle bin window adheres to the core principle that all destructive operations are recoverable.
 
 ---
 
@@ -121,17 +123,17 @@ Rationale: site photos and scanned delivery notes are common. Without OCR, image
 
 ## File Compression Above a Threshold
 
-Large files are compressed before storage. Threshold tentatively set at 5MB. PDFs and JPEGs may be skipped as they are already compressed.
+Files larger than 5MB (`COMPRESSION_THRESHOLD_BYTES`) are evaluated for gzip compression before storage. The compressed version is retained only if it saves at least 10% (`COMPRESSION_MIN_SAVINGS_RATIO`). Decompression is transparent to consumers via the `BlobStore` interface, indicated by a `.gz` key suffix.
 
-Rationale: reduces cloud storage costs. Compressing small files saves negligible space while adding processing overhead — only worth doing above a threshold.
+Rationale: reduces cloud/disk storage costs. Compressing small files saves negligible space while adding processing overhead — only worth doing above a threshold when meaningful compression is achieved.
 
 ---
 
-## OneDrive Folder Structure
+## Storage Folder Structure Configurable via Environment
 
-Storage is organised under a configurable root folder, with subfolders for `active`, `archived`, and `deleted`.
+Storage is organised under `STORAGE_ROOT` (defaults to `./data`), with subfolders for `active/`, `archived/`, and `deleted/`.
 
-Rationale: gives the admin a coherent view of all files outside the app. Reflects the access model directly: active projects are visible, archived projects are zipped, deleted files wait in a holding area.
+Rationale: gives the admin a coherent view of all files outside the app. Reflects the access model directly: active projects are visible, archived projects are zipped, deleted files wait in a holding area. Local structure maps 1:1 onto future OneDrive storage.
 
 ---
 

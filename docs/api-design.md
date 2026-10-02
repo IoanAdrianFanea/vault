@@ -229,8 +229,60 @@ All endpoints return the same user shape (no passwordHash):
 
 ---
 
+## Archive Endpoints (Phase 4 — Admin Only)
+
+### `GET /archive`
+Lists all archived projects.
+- **Response `200`**: `ArchivedProjectSummary[]`
+  - `id`: string
+  - `name`: string
+  - `archivedAt`: ISO date string
+  - `archivedByEmail`: string | null
+  - `archivedByName`: string | null
+  - `archiveSizeBytes`: number
+  - `documentCount`: number
+  - `memberCount`: number
+  - `operation`: `'ARCHIVING' | 'UNARCHIVING' | 'DELETING' | null`
+
+### `POST /archive/:id`
+Archives an active project into a zip file.
+- **Response `200`**: `ArchiveProjectResult`
+  - `id`: string
+  - `name`: string
+  - `archivedAt`: ISO date string
+  - `archiveSizeBytes`: number
+  - `documentCount`: number
+  - `missingDocuments`: `Array<{ id: string, originalFilename: string }>`
+- **Errors**: `403` (Forbidden), `404` (Project not found), `409` (Already archived / in-progress / conflict)
+
+### `POST /archive/:id/restore`
+Extracts and restores an archived project back to active status.
+- **Response `200`**: `UnarchiveProjectResult`
+  - `id`: string
+  - `restoredDocuments`: number
+  - `missingDocuments`: `Array<{ id: string, originalFilename: string }>`
+- **Errors**: `403` (Forbidden), `404` (Not found), `409` (Conflict)
+
+### `GET /archive/:id/download`
+Streams the raw archive zip file without unarchiving.
+- **Response `200`**: `application/zip` stream with `Content-Disposition: attachment; filename="<name>-archive.zip"` and `Content-Length`.
+- **Errors**: `403` (Forbidden), `404` (Not found), `409` (Conflict)
+
+### `DELETE /archive/:id`
+Moves an archived project and its documents into the recycle bin (30-day recovery window).
+- **Response `200`**: `{ id: string }`
+- **Errors**: `403` (Forbidden), `404` (Not found), `409` (Conflict)
+
+---
+
+## Recycle Bin Field Extensions (Phase 4)
+
+- `GET /recycle-bin/projects`: response objects include `isArchived: boolean`.
+- `GET /recycle-bin` & `GET /recycle-bin/projects/:id/documents`: document objects include `restorable: boolean` (false for zip-backed documents) and `requiresProjectChoice: boolean`.
+- `POST /recycle-bin/projects/:id/restore`: response includes `restoredTo: 'ACTIVE' | 'ARCHIVE'`.
+
+---
+
 ## Not Yet Implemented
 
 - `GET /jobs/:id` — job status (Phase 6)
-- Filter definition CRUD (Phase 3)
-- Archive / unarchive endpoints (Phase 4)

@@ -1,14 +1,16 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BlobStore } from '../storage/blob-store.interface';
 import { BLOB_STORE } from '../storage/blob-store.interface';
 import { UserRole } from '@prisma/client';
 import archiver from 'archiver';
 import { Readable } from 'stream';
-import { promises as fs } from 'fs';
+import { LIVE_PROJECT_WHERE } from '../projects/project-visibility';
 
 @Injectable()
 export class ExportsService {
+  private readonly logger = new Logger(ExportsService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(BLOB_STORE) private blobStore: BlobStore,
@@ -51,19 +53,26 @@ export class ExportsService {
       where: {
         id: documentId,
         deletedAt: null,
+        project: LIVE_PROJECT_WHERE,
         ...(allowedProjectIds !== null && {
           projectId: { in: allowedProjectIds },
         }),
       },
     });
 
-    if (!document) {
+    if (!document || !document.storageKey) {
       throw new NotFoundException('Document not found');
     }
 
-    // Read file via persisted storage key to avoid user-scope path coupling.
-    const filePath = this.blobStore.getPath(document.storageKey);
-    const fileBuffer = await fs.readFile(filePath);
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await this.blobStore.readFile(document.storageKey);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new NotFoundException('File not found');
+      }
+      throw err;
+    }
 
     return {
       buffer: fileBuffer,
@@ -97,6 +106,7 @@ export class ExportsService {
       where: {
         id: { in: documentIds },
         deletedAt: null,
+        project: LIVE_PROJECT_WHERE,
         ...(allowedProjectIds !== null && {
           projectId: { in: allowedProjectIds },
         }),
@@ -116,15 +126,22 @@ export class ExportsService {
     // Add each document to the archive
     for (const document of documents) {
       try {
-        const filePath = this.blobStore.getPath(document.storageKey);
-        const pdfBuffer = await fs.readFile(filePath);
-        archive.append(pdfBuffer, { name: document.originalFilename });
+        if (
+          document.storageKey &&
+          (await this.blobStore.exists(document.storageKey))
+        ) {
+          archive.append(this.blobStore.createReadStream(document.storageKey), {
+            name: document.originalFilename,
+          });
+        } else {
+          this.logger.warn(
+            `Storage key missing or file does not exist for document ${document.id}`,
+          );
+        }
       } catch (error) {
-        console.error(
-          `Failed to add document ${document.id} to archive:`,
-          error,
+        this.logger.warn(
+          `Failed to add document ${document.id} to archive: ${String(error)}`,
         );
-        // Continue with other documents
       }
     }
 

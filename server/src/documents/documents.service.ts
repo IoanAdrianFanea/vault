@@ -5,19 +5,26 @@ import {
   Inject,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtractionService } from './extraction.service';
 import { BLOB_STORE, type BlobStore } from '../storage/blob-store.interface';
-import { DocumentStatus, UserRole, type FilterDefinition, type Prisma } from '@prisma/client';
+import {
+  DocumentStatus,
+  UserRole,
+  type FilterDefinition,
+  type Prisma,
+} from '@prisma/client';
 import {
   type DocumentsSortBy,
   type ListDocumentsQueryDto,
 } from './dto/list-documents-query.dto';
 import {
-  toActiveStorageKey,
-  toDeletedStorageKey,
-} from '../common/deletion.constants';
+  LIVE_PROJECT_WHERE,
+  WRITABLE_PROJECT_WHERE,
+} from '../projects/project-visibility';
+import { deletedDocumentKey, storageFileName } from '../storage/storage-keys';
 import {
   buildCustomFilterWhereClauses,
   parseQueryCustomFilters,
@@ -66,7 +73,7 @@ export class DocumentsService {
       );
 
       const project = await this.prisma.project.findFirst({
-        where: { id: projectId, deletedAt: null },
+        where: { id: projectId, ...WRITABLE_PROJECT_WHERE },
         select: { id: true },
       });
 
@@ -125,7 +132,7 @@ export class DocumentsService {
 
       // Save file to storage
       const { storageKey } = await this.blobStore.saveFile(
-        userId,
+        projectId,
         document.id,
         file.buffer,
         file.mimetype,
@@ -137,6 +144,18 @@ export class DocumentsService {
         data: { storageKey },
       });
 
+      const stillWritable = await this.prisma.project.count({
+        where: { id: projectId, ...WRITABLE_PROJECT_WHERE },
+      });
+      if (stillWritable === 0) {
+        await this.blobStore.deleteFile(storageKey);
+        await this.prisma.document.delete({ where: { id: document.id } });
+        documentId = undefined;
+        throw new ConflictException(
+          'This project is being archived. Please try again later.',
+        );
+      }
+
       if (file.mimetype === 'application/pdf') {
         // Set status to processing
         await this.prisma.document.update({
@@ -145,9 +164,8 @@ export class DocumentsService {
         });
 
         // Extract text from PDF
-        const filePath = this.blobStore.getPath(storageKey);
         const { text: extractedText, pageCount } =
-          await this.extractionService.extractTextFromPdfPath(filePath);
+          await this.extractionService.extractTextFromPdfBuffer(file.buffer);
 
         // Save extracted text
         await this.prisma.documentText.upsert({
@@ -176,9 +194,10 @@ export class DocumentsService {
         });
 
         try {
-          const filePath = this.blobStore.getPath(storageKey);
           const { text: extractedText } =
-            await this.extractionService.extractTextFromImagePath(filePath);
+            await this.extractionService.extractTextFromImageBuffer(
+              file.buffer,
+            );
 
           if (extractedText.trim().length > 0) {
             await this.prisma.documentText.upsert({
@@ -243,6 +262,7 @@ export class DocumentsService {
       where: {
         id: documentId,
         deletedAt: null,
+        project: LIVE_PROJECT_WHERE,
         ...(allowedProjectIds !== null && {
           projectId: { in: allowedProjectIds },
         }),
@@ -329,6 +349,7 @@ export class DocumentsService {
 
     // Soft-deleted documents are never visible through any read path.
     whereClauses.push({ deletedAt: null });
+    whereClauses.push({ project: LIVE_PROJECT_WHERE });
 
     if (
       options.allowedProjectIds !== undefined &&
@@ -367,7 +388,10 @@ export class DocumentsService {
     const customFilters = parseQueryCustomFilters(query.customFilters);
     if (Object.keys(customFilters).length > 0 && options.filterDefinitions) {
       whereClauses.push(
-        ...buildCustomFilterWhereClauses(options.filterDefinitions, customFilters),
+        ...buildCustomFilterWhereClauses(
+          options.filterDefinitions,
+          customFilters,
+        ),
       );
     }
 
@@ -536,6 +560,7 @@ export class DocumentsService {
       where: {
         id: documentId,
         deletedAt: null,
+        project: LIVE_PROJECT_WHERE,
         ...(allowedProjectIds !== null && {
           projectId: { in: allowedProjectIds },
         }),
@@ -588,6 +613,7 @@ export class DocumentsService {
     const allDocuments = await this.prisma.document.findMany({
       where: {
         deletedAt: null,
+        project: LIVE_PROJECT_WHERE,
         text: {
           isNot: null,
         },
@@ -740,6 +766,7 @@ export class DocumentsService {
       where: {
         id: documentId,
         deletedAt: null,
+        project: WRITABLE_PROJECT_WHERE,
         ...(allowedProjectIds !== null && {
           projectId: { in: allowedProjectIds },
         }),
@@ -753,8 +780,13 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
 
-    const originalStorageKey = toActiveStorageKey(document.storageKey);
-    const deletedStorageKey = toDeletedStorageKey(originalStorageKey);
+    const originalStorageKey = document.storageKey;
+    const deletedStorageKey = originalStorageKey
+      ? deletedDocumentKey(
+          document.projectId,
+          storageFileName(originalStorageKey),
+        )
+      : '';
 
     if (originalStorageKey) {
       try {

@@ -20,8 +20,8 @@ NestJS API  (port 3000)
         ├── Storage module       ✅ built
         ├── Email module         ✅ built (Phase 2)
         ├── Recycle Bin module   ✅ built (Phase 2 — delete logging, restore, 30-day purge)
-        ├── Filters module       ⬜ planned (Phase 3)
-        └── Archive module       ⬜ planned (Phase 4)
+        ├── Filters module       ✅ built (Phase 3)
+        └── Archive module       ✅ built (Phase 4)
         │
         ▼
 Prisma ORM
@@ -69,7 +69,9 @@ Legend: ✅ present in `schema.prisma` today · ⬜ planned
 ### Project ✅
 - `id`, `name` (unique)
 - `createdAt`, `updatedAt`
-- ⬜ `archivedAt` (nullable — set on archive, cleared on unarchive — Phase 4)
+- `deletedAt`, `deletedById`, `deletedByEmail` (soft delete for recycle bin)
+- `archivedAt`, `archivedById`, `archivedByEmail`, `archiveSizeBytes` (nullable — set on archive, cleared on unarchive — Phase 4)
+- `archiveOperation`, `archiveOperationStartedAt` (in-progress marker)
 
 ### ProjectMembership ✅
 - Composite key: `userId + projectId`
@@ -137,38 +139,35 @@ On any failure:
 
 ## Storage
 
-Files stored via `BlobStore` interface (`saveFile`, `getFile`, `getPath`, `moveFile`, `deleteFile`).
+Files stored via `BlobStore` interface (`saveFile`, `readFile`, `createReadStream`, `writeStream`, `withLocalFile`, `exists`, `getSize`, `moveFile`, `deleteFile`).
 
-Current implementation: `LocalBlobStore`.
+Current implementation: `LocalBlobStore` configured via `STORAGE_ROOT` (defaults to `./data`).
 
-### Storage key (current)
-`{userId}/{documentId}.{ext}`
-
-Soft-deleted files keep that shape behind a prefix: `deleted/{userId}/{documentId}.{ext}`.
-`moveFile` is what shifts a file between the two areas (soft delete moves it in, restore moves
-it back); only the permanent purge unlinks. The project-based key restructure is Phase 4.
-
-### Storage key (Phase 4 — OneDrive)
+### Storage key (Phase 4 layout)
 ```
-{root}/
-  ├── active/{projectId}/{documentId}.{ext}
+{STORAGE_ROOT}/
+  ├── active/{projectId}/{documentId}.{ext}[.gz]
   ├── archived/{projectId}.zip
-  └── deleted/{projectId}/{documentId}.{ext}    (during 30-day window)
+  └── deleted/{projectId}/{documentId}.{ext}[.gz]    (during 30-day window)
 ```
+
+Soft-deleted project archive zips reside temporarily in `deleted/{projectId}/archive.zip`.
 
 ### Compression (Phase 4)
-- Files above threshold (suggested 5MB+) compressed before storage
-- Skip compression if file is already compressed (PDF, JPEG)
+- Files above `COMPRESSION_THRESHOLD_BYTES` (default 5MB) are evaluated for gzip compression before storage
+- Compressed copy is retained only if it saves at least `COMPRESSION_MIN_SAVINGS_RATIO` (default 10%)
+- The `.gz` key suffix denotes a compressed file; decompression is transparent on read
 
 ---
 
-## Scheduled Work
+## Scheduled Work & Startup Recovery
 
 `ScheduleModule` (`@nestjs/schedule`) is registered in `AppModule`.
 
 | Task | Schedule | Behaviour |
 |---|---|---|
 | `PurgeTask` (recycle bin) | Daily at 03:00 | Permanently deletes documents soft-deleted more than `DELETION_RETENTION_DAYS` (30) days ago: unlinks the file, deletes the `Document` row, stamps `permanentlyDeletedAt` on the `DeletionLog`. Idempotent, guarded against overlapping runs, tolerant of missing files |
+| `ArchiveService.onApplicationBootstrap` | Server startup | Recovers interrupted archive, unarchive, or delete operations that were interrupted mid-flight by inspecting `Project.archiveOperation` |
 
 ---
 
@@ -208,9 +207,9 @@ Enforced in the service layer, not the controller layer.
 - Upload: admins anywhere; users only to assigned projects — ✅ implemented
 - Delete: admins anywhere; users only on documents in their assigned projects — ✅ implemented (soft delete + `DeletionLog`)
 - Project management (create, update, delete): admin only — ✅ implemented
-- Project archive: admin only — ⬜ Phase 4
+- Project archive: admin only — ✅ implemented (Phase 4)
 - User management (list, edit, approve, change role): admin only — ✅ implemented
-- Filter management (create, edit, delete): admin only — ⬜ Phase 3
+- Filter management (create, edit, delete): admin only — ✅ implemented (Phase 3)
 - Restore / permanent delete from recycle bin: admin only — ✅ implemented
 
 Admin checks are currently repeated inline in each controller/service rather than via a shared `RolesGuard`. Worth consolidating.

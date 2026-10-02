@@ -92,7 +92,9 @@ function ConfirmModal({
       case 'purge-project':
         return `"${action.project.name}" and every remaining document in it will be removed for good. Deletion log entries are kept for auditing. This cannot be undone.`;
       case 'restore-project':
-        return `"${action.project.name}" and the documents that were active when it was deleted will be restored and become visible again.`;
+        return action.project.isArchived
+          ? `"${action.project.name}" will be returned to the archive. Its documents stay hidden until the project is unarchived.`
+          : `"${action.project.name}" and the documents that were active when it was deleted will be restored and become visible again.`;
       case 'restore-document':
         return action.requiresProjectChoice
           ? `Choose which project "${action.document.originalFilename}" should be restored into.`
@@ -349,19 +351,31 @@ export default function AdminRecycleBin() {
                 <td className="px-6 py-5">{expiryBadge(doc.daysRemaining)}</td>
                 <td className="px-6 py-5 text-right">
                   <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() =>
-                        setPendingAction({
-                          type: 'restore-document',
-                          document: doc,
-                          requiresProjectChoice: options.requiresProjectChoiceOnRestore,
-                        })
-                      }
-                      className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors"
-                      title="Restore"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">restore</span>
-                    </button>
+                    {doc.restorable ? (
+                      <button
+                        onClick={() =>
+                          setPendingAction({
+                            type: 'restore-document',
+                            document: doc,
+                            requiresProjectChoice:
+                              options.requiresProjectChoiceOnRestore ||
+                              doc.requiresProjectChoice,
+                          })
+                        }
+                        className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors"
+                        title="Restore"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">restore</span>
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="p-1.5 text-on-surface-variant/40 cursor-not-allowed rounded"
+                        title="Stored in the project archive – restore the whole project"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">restore</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => setPendingAction({ type: 'purge-document', document: doc })}
                       className="p-1.5 text-outline hover:text-error hover:bg-error-container/20 rounded transition-colors"
@@ -412,9 +426,16 @@ export default function AdminRecycleBin() {
             </button>
 
             <div className="flex items-center justify-between mb-2">
-              <h1 className="text-headline-sm font-headline font-bold text-on-surface">
-                {selectedProject.name}
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-headline-sm font-headline font-bold text-on-surface">
+                  {selectedProject.name}
+                </h1>
+                {selectedProject.isArchived && (
+                  <span className="px-2.5 py-0.5 rounded text-label-sm font-semibold bg-tertiary-container text-tertiary-dim border border-tertiary-dim/20">
+                    Archived
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPendingAction({ type: 'restore-project', project: selectedProject })}
@@ -434,8 +455,10 @@ export default function AdminRecycleBin() {
             </div>
             <p className="text-body-sm text-on-surface-variant mb-8">
               Deleted by {selectedProject.deletedByName || selectedProject.deletedByEmail || 'Unknown'} on{' '}
-              {formatDate(selectedProject.deletedAt)}. Restoring an individual document below lets
-              you choose which project to send it to.
+              {formatDate(selectedProject.deletedAt)}.{' '}
+              {selectedProject.isArchived
+                ? 'This project was archived when deleted. Swept documents can only be restored with the whole project.'
+                : 'Restoring an individual document below lets you choose which project to send it to.'}
             </p>
 
             {error && (
@@ -519,6 +542,11 @@ export default function AdminRecycleBin() {
                             <span className="font-semibold text-on-surface block truncate">
                               {project.name}
                             </span>
+                            {project.isArchived && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-tertiary-container text-tertiary-dim border border-tertiary-dim/20 shrink-0">
+                                Archived
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-5 text-on-surface-variant">

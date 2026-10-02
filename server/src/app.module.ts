@@ -10,6 +10,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { EmailModule } from './email/email.module';
 import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 import { FiltersModule } from './filters/filters.module';
+import { ArchiveModule } from './archive/archive.module';
 import path from 'path';
 
 @Module({
@@ -28,6 +29,7 @@ import path from 'path';
     EmailModule,
     RecycleBinModule,
     FiltersModule,
+    ArchiveModule,
   ],
   controllers: [],
   providers: [],

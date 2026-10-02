@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -13,9 +14,15 @@ import {
   DELETION_RETENTION_DAYS,
   getDaysRemaining,
   getPurgeCutoff,
-  toActiveStorageKey,
-  toDeletedStorageKey,
 } from '../common/deletion.constants';
+import {
+  activeDocumentKey,
+  archiveKey,
+  deletedArchiveKey,
+  isDeletedAreaKey,
+  storageFileName,
+} from '../storage/storage-keys';
+import { WRITABLE_PROJECT_WHERE } from '../projects/project-visibility';
 
 export interface DeletedDocumentSummary {
   id: string;
@@ -29,6 +36,8 @@ export interface DeletedDocumentSummary {
   deletedByName: string | null;
   daysRemaining: number;
   retentionDays: number;
+  restorable: boolean;
+  requiresProjectChoice: boolean;
 }
 
 export interface DeletedProjectSummary {
@@ -40,6 +49,7 @@ export interface DeletedProjectSummary {
   documentCount: number;
   daysRemaining: number;
   retentionDays: number;
+  isArchived: boolean;
 }
 
 @Injectable()
@@ -104,6 +114,7 @@ export class RecycleBinService {
         id: true,
         name: true,
         deletedAt: true,
+        archivedAt: true,
         deletedByEmail: true,
         deletedBy: { select: { fullName: true } },
         _count: { select: { documents: true } },
@@ -124,6 +135,7 @@ export class RecycleBinService {
         documentCount: project._count.documents,
         daysRemaining: getDaysRemaining(deletedAt, now),
         retentionDays: DELETION_RETENTION_DAYS,
+        isArchived: project.archivedAt !== null,
       };
     });
   }
@@ -145,7 +157,13 @@ export class RecycleBinService {
         sizeBytes: true,
         deletedAt: true,
         projectId: true,
-        project: { select: { name: true } },
+        project: {
+          select: {
+            name: true,
+            deletedAt: true,
+            archivedAt: true,
+          },
+        },
       },
     });
 
@@ -181,6 +199,15 @@ export class RecycleBinService {
       const log = logByDocumentId.get(doc.id);
       const deletedAt = doc.deletedAt as Date;
 
+      const project = doc.project;
+      const isZipBacked =
+        !!project.archivedAt &&
+        !!project.deletedAt &&
+        deletedAt.getTime() === project.deletedAt.getTime();
+      const restorable = !isZipBacked;
+      const requiresProjectChoice =
+        project.deletedAt !== null || project.archivedAt !== null;
+
       return {
         id: doc.id,
         originalFilename: doc.originalFilename,
@@ -193,6 +220,8 @@ export class RecycleBinService {
         deletedByName: log?.actor?.fullName ?? null,
         daysRemaining: getDaysRemaining(deletedAt, now),
         retentionDays: DELETION_RETENTION_DAYS,
+        restorable,
+        requiresProjectChoice,
       };
     });
   }
@@ -217,8 +246,14 @@ export class RecycleBinService {
       select: {
         id: true,
         storageKey: true,
+        deletedAt: true,
         projectId: true,
-        project: { select: { deletedAt: true } },
+        project: {
+          select: {
+            deletedAt: true,
+            archivedAt: true,
+          },
+        },
       },
     });
 
@@ -226,9 +261,24 @@ export class RecycleBinService {
       throw new NotFoundException('Deleted document not found');
     }
 
+    const isZipBacked =
+      !!document.project.archivedAt &&
+      !!document.project.deletedAt &&
+      document.deletedAt!.getTime() === document.project.deletedAt.getTime();
+
+    if (isZipBacked) {
+      throw new BadRequestException(
+        'This document is stored inside its project archive. Restore the whole project instead.',
+      );
+    }
+
+    const originalUnavailable =
+      document.project.deletedAt !== null ||
+      document.project.archivedAt !== null;
+
     const destinationProjectId = await this.resolveRestoreDestinationProject(
       document.projectId,
-      document.project.deletedAt,
+      originalUnavailable,
       targetProjectId,
     );
 
@@ -243,20 +293,27 @@ export class RecycleBinService {
 
   /**
    * Restore a soft-deleted project: clear its `deletedAt` and restore every document that
-   * was swept up by that same project deletion (matched by the shared `deletedAt` timestamp
-   * `ProjectsService.deleteProject` gives both the project and its documents). Documents
-   * trashed individually before the project was deleted keep a different `deletedAt` and are
-   * left deleted, restorable on their own — admin only.
+   * was swept up by that same project deletion.
    */
   async restoreProject(
     projectId: string,
     userId: string,
-  ): Promise<{ id: string; restoredDocuments: number }> {
+  ): Promise<{
+    id: string;
+    restoredDocuments: number;
+    restoredTo: 'ACTIVE' | 'ARCHIVE';
+  }> {
     await this.assertAdmin(userId);
 
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, deletedAt: { not: null } },
-      select: { id: true, deletedAt: true },
+      select: {
+        id: true,
+        deletedAt: true,
+        deletedById: true,
+        deletedByEmail: true,
+        archivedAt: true,
+      },
     });
 
     if (!project) {
@@ -276,44 +333,91 @@ export class RecycleBinService {
       throw new NotFoundException('Deleted project not found');
     }
 
-    const sweptDocuments = await this.prisma.document.findMany({
-      where: { projectId, deletedAt: cascadeDeletedAt },
-      select: { id: true, storageKey: true },
-    });
+    if (project.archivedAt === null) {
+      // Normal active project restore
+      const sweptDocuments = await this.prisma.document.findMany({
+        where: { projectId, deletedAt: cascadeDeletedAt },
+        select: { id: true, storageKey: true },
+      });
 
-    let restoredDocuments = 0;
-    for (const document of sweptDocuments) {
-      try {
-        await this.restoreDocumentRow(
-          document.id,
-          document.storageKey,
-          projectId,
-        );
-        restoredDocuments += 1;
-      } catch (error) {
-        this.logger.warn(
-          `Could not restore document ${document.id} while restoring project ${projectId}: ${String(error)}`,
-        );
+      let restoredDocuments = 0;
+      for (const document of sweptDocuments) {
+        try {
+          await this.restoreDocumentRow(
+            document.id,
+            document.storageKey,
+            projectId,
+          );
+          restoredDocuments += 1;
+        } catch (error) {
+          this.logger.warn(
+            `Could not restore document ${document.id} while restoring project ${projectId}: ${String(error)}`,
+          );
+        }
       }
+
+      return { id: projectId, restoredDocuments, restoredTo: 'ACTIVE' };
     }
 
-    return { id: projectId, restoredDocuments };
+    // Zip-backed archived project restore
+    try {
+      await this.blobStore.moveFile(
+        deletedArchiveKey(projectId),
+        archiveKey(projectId),
+      );
+    } catch (err) {
+      // Revert the claim
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          deletedAt: cascadeDeletedAt,
+          deletedById: project.deletedById,
+          deletedByEmail: project.deletedByEmail,
+        },
+      });
+      this.logger.error(`Failed to move archive zip: ${String(err)}`);
+      throw new ConflictException(
+        'The project archive file is missing, so the project cannot be restored',
+      );
+    }
+
+    const [docsUpdate] = await this.prisma.$transaction([
+      this.prisma.document.updateMany({
+        where: { projectId, deletedAt: cascadeDeletedAt },
+        data: { deletedAt: null },
+      }),
+      this.prisma.deletionLog.updateMany({
+        where: {
+          projectId,
+          deletedAt: cascadeDeletedAt,
+          restoredAt: null,
+          permanentlyDeletedAt: null,
+        },
+        data: { restoredAt: new Date() },
+      }),
+    ]);
+
+    return {
+      id: projectId,
+      restoredDocuments: docsUpdate.count,
+      restoredTo: 'ARCHIVE',
+    };
   }
 
   /**
    * Figure out which active project a restored document should land in: the caller's
-   * explicit choice if given (validated as an active project), otherwise the document's
-   * original project — unless that project is itself deleted, in which case the admin must
+   * explicit choice if given (validated as a writable project), otherwise the document's
+   * original project — unless that project is itself deleted or archived, in which case the admin must
    * choose one.
    */
   private async resolveRestoreDestinationProject(
     originalProjectId: string,
-    originalProjectDeletedAt: Date | null,
+    originalProjectUnavailable: boolean,
     targetProjectId?: string,
   ): Promise<string> {
     if (targetProjectId) {
       const targetProject = await this.prisma.project.findFirst({
-        where: { id: targetProjectId, deletedAt: null },
+        where: { id: targetProjectId, ...WRITABLE_PROJECT_WHERE },
         select: { id: true },
       });
 
@@ -326,9 +430,9 @@ export class RecycleBinService {
       return targetProjectId;
     }
 
-    if (originalProjectDeletedAt) {
+    if (originalProjectUnavailable) {
       throw new BadRequestException(
-        'The original project has been deleted. Choose a project to restore this document into.',
+        'The original project is no longer active. Choose a project to restore this document into.',
       );
     }
 
@@ -337,27 +441,19 @@ export class RecycleBinService {
 
   /**
    * Shared restore mechanics for a single document row: claim it, move its file back out of
-   * the deleted holding area, and close its open `DeletionLog` row. Used both for restoring a
-   * single document and for restoring every document swept up by a project restore.
+   * the deleted holding area, and close its open `DeletionLog` row.
    */
   private async restoreDocumentRow(
     documentId: string,
     currentStorageKey: string,
     destinationProjectId: string,
   ): Promise<void> {
-    const log = await this.prisma.deletionLog.findFirst({
-      where: {
-        documentId,
-        restoredAt: null,
-        permanentlyDeletedAt: null,
-      },
-      orderBy: { deletedAt: 'desc' },
-      select: { id: true, storageKey: true },
-    });
-
-    const restoredStorageKey = toActiveStorageKey(
-      log?.storageKey || currentStorageKey,
-    );
+    const restoredStorageKey = currentStorageKey
+      ? activeDocumentKey(
+          destinationProjectId,
+          storageFileName(currentStorageKey),
+        )
+      : '';
     const restoredAt = new Date();
 
     // Claim the row first so a concurrent purge cannot delete the document (and its file)
@@ -439,8 +535,6 @@ export class RecycleBinService {
 
   /**
    * Permanently delete every document whose retention window has expired.
-   * Safe to run repeatedly and concurrently: each document is claimed with a
-   * conditional delete, and a missing file is never fatal.
    */
   async purgeExpiredDocuments(
     now: Date = new Date(),
@@ -465,7 +559,6 @@ export class RecycleBinService {
           purged += 1;
         }
       } catch (error) {
-        // One bad document must not stop the rest of the sweep.
         this.logger.error(
           `Failed to permanently delete document ${document.id}: ${String(error)}`,
         );
@@ -476,9 +569,7 @@ export class RecycleBinService {
   }
 
   /**
-   * Permanently delete every project whose retention window has expired, along with
-   * whatever documents remain in it. Safe to run repeatedly and concurrently: each project
-   * is claimed with a conditional delete, and a missing file is never fatal.
+   * Permanently delete every project whose retention window has expired.
    */
   async purgeExpiredProjects(
     now: Date = new Date(),
@@ -499,7 +590,6 @@ export class RecycleBinService {
           purged += 1;
         }
       } catch (error) {
-        // One bad project must not stop the rest of the sweep.
         this.logger.error(
           `Failed to permanently delete project ${project.id}: ${String(error)}`,
         );
@@ -510,16 +600,13 @@ export class RecycleBinService {
   }
 
   /**
-   * Unlink the file and delete the Document row, leaving the DeletionLog row in place
-   * with `permanentlyDeletedAt` set. Returns false if another run got there first.
+   * Unlink the file and delete the Document row.
    */
   private async purgeDocument(
     documentId: string,
     storageKey: string,
     cutoff?: Date,
   ): Promise<boolean> {
-    // Claim the row first: if a concurrent restore (or another purge) got there first,
-    // deleteMany matches nothing and the file is left untouched.
     const claimed = await this.prisma.document.deleteMany({
       where: {
         id: documentId,
@@ -532,12 +619,9 @@ export class RecycleBinService {
     }
 
     // Files are only ever unlinked from the deleted holding area.
-    const deletedStorageKey = storageKey ? toDeletedStorageKey(storageKey) : '';
-
-    if (deletedStorageKey) {
+    if (storageKey && isDeletedAreaKey(storageKey)) {
       try {
-        // deleteFile already ignores a missing file.
-        await this.blobStore.deleteFile(deletedStorageKey);
+        await this.blobStore.deleteFile(storageKey);
       } catch (error) {
         this.logger.warn(
           `Could not delete file for document ${documentId}: ${String(error)}`,
@@ -545,8 +629,6 @@ export class RecycleBinService {
       }
     }
 
-    // Only the log row for the deletion being purged is closed — earlier rows that were
-    // restored keep their `restoredAt` and stay untouched.
     await this.prisma.deletionLog.updateMany({
       where: { documentId, restoredAt: null, permanentlyDeletedAt: null },
       data: { permanentlyDeletedAt: new Date() },
@@ -556,19 +638,24 @@ export class RecycleBinService {
   }
 
   /**
-   * Delete a project row (claimed with a conditional delete, same as `purgeDocument`) and
-   * clean up whatever it leaves behind. Every remaining document in the project is, by
-   * construction, already soft-deleted (`ProjectsService.deleteProject` sweeps all active
-   * documents before a project can be recycled), so its file lives in the `deleted/` holding
-   * area. Documents and memberships are removed from the database automatically by the
-   * cascading foreign keys on `Document.project` and `ProjectMembership.project`; this only
-   * has to clean up the files on disk and close the affected `DeletionLog` rows. Returns
-   * false if another run got there first.
+   * Delete a project row and clean up whatever it leaves behind.
    */
   private async purgeProject(
     projectId: string,
     cutoff?: Date,
   ): Promise<boolean> {
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id: projectId,
+        deletedAt: cutoff ? { not: null, lt: cutoff } : { not: null },
+      },
+      select: { id: true, archivedAt: true },
+    });
+
+    if (!project) {
+      return false;
+    }
+
     // Snapshot the documents before the cascade delete removes their rows.
     const documents = await this.prisma.document.findMany({
       where: { projectId, deletedAt: { not: null } },
@@ -586,21 +673,25 @@ export class RecycleBinService {
       return false;
     }
 
-    for (const document of documents) {
-      const deletedStorageKey = document.storageKey
-        ? toDeletedStorageKey(document.storageKey)
-        : '';
-
-      if (!deletedStorageKey) {
-        continue;
-      }
-
+    if (project.archivedAt !== null) {
       try {
-        await this.blobStore.deleteFile(deletedStorageKey);
+        await this.blobStore.deleteFile(deletedArchiveKey(projectId));
       } catch (error) {
         this.logger.warn(
-          `Could not delete file for document ${document.id}: ${String(error)}`,
+          `Could not delete archive zip for project ${projectId}: ${String(error)}`,
         );
+      }
+    }
+
+    for (const document of documents) {
+      if (document.storageKey && isDeletedAreaKey(document.storageKey)) {
+        try {
+          await this.blobStore.deleteFile(document.storageKey);
+        } catch (error) {
+          this.logger.warn(
+            `Could not delete file for document ${document.id}: ${String(error)}`,
+          );
+        }
       }
     }
 

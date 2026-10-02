@@ -1,82 +1,201 @@
-import { Injectable } from '@nestjs/common';
-import { promises as fs } from 'fs';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  promises as fs,
+  createReadStream as fsCreateReadStream,
+  createWriteStream as fsCreateWriteStream,
+} from 'fs';
 import * as path from 'path';
-import type { BlobStore } from './blob-store.interface';
+import * as zlib from 'zlib';
+import { promisify } from 'util';
+import { pipeline } from 'stream/promises';
+import * as stream from 'stream';
+import { Readable } from 'stream';
+import type { BlobStore, SavedBlob } from './blob-store.interface';
+import {
+  activeDocumentKey,
+  assertSafeStorageKey,
+  documentFileName,
+  extensionForMimeType,
+  isCompressedKey,
+} from './storage-keys';
 
-// Local file storage implementation
+const gzipAsync = promisify(zlib.gzip);
+const gunzipAsync = promisify(zlib.gunzip);
+
 @Injectable()
 export class LocalBlobStore implements BlobStore {
-  private readonly rootDir = './data';
+  private readonly rootDir: string;
+  private readonly compressionThresholdBytes: number;
+  private readonly compressionMinSavingsRatio: number;
+  private readonly logger = new Logger(LocalBlobStore.name);
 
-  /**
-   * Save a file to disk at ./data/{userId}/{documentId}.{ext}
-   */
+  constructor(config: ConfigService) {
+    this.rootDir = path.resolve(config.get<string>('STORAGE_ROOT') ?? './data');
+
+    const thresholdRaw = config.get<string | number>(
+      'COMPRESSION_THRESHOLD_BYTES',
+    );
+    const parsedThreshold =
+      thresholdRaw !== undefined ? Number(thresholdRaw) : NaN;
+    if (Number.isFinite(parsedThreshold) && parsedThreshold >= 0) {
+      this.compressionThresholdBytes = Math.floor(parsedThreshold);
+    } else {
+      if (thresholdRaw !== undefined) {
+        this.logger.warn(
+          `Invalid COMPRESSION_THRESHOLD_BYTES "${thresholdRaw}", falling back to default 5242880`,
+        );
+      }
+      this.compressionThresholdBytes = 5 * 1024 * 1024;
+    }
+
+    const minSavingsRaw = config.get<string | number>(
+      'COMPRESSION_MIN_SAVINGS_RATIO',
+    );
+    const parsedMinSavings =
+      minSavingsRaw !== undefined ? Number(minSavingsRaw) : NaN;
+    if (
+      Number.isFinite(parsedMinSavings) &&
+      parsedMinSavings >= 0 &&
+      parsedMinSavings < 1
+    ) {
+      this.compressionMinSavingsRatio = parsedMinSavings;
+    } else {
+      if (minSavingsRaw !== undefined) {
+        this.logger.warn(
+          `Invalid COMPRESSION_MIN_SAVINGS_RATIO "${minSavingsRaw}", falling back to default 0.1`,
+        );
+      }
+      this.compressionMinSavingsRatio = 0.1;
+    }
+  }
+
+  private resolvePath(storageKey: string): string {
+    assertSafeStorageKey(storageKey);
+    const full = path.resolve(this.rootDir, storageKey);
+    if (!full.startsWith(this.rootDir + path.sep)) {
+      throw new Error('Unsafe storage key');
+    }
+    return full;
+  }
+
   async saveFile(
-    userId: string,
+    projectId: string,
     documentId: string,
     buffer: Buffer,
     mimeType: string,
-  ): Promise<{ storageKey: string }> {
-    const extension = this.getExtensionFromMimeType(mimeType);
-    const storageKey = `${userId}/${documentId}${extension}`;
-    const userDir = path.join(this.rootDir, userId);
-    const filePath = path.join(this.rootDir, storageKey);
+  ): Promise<SavedBlob> {
+    const extension = extensionForMimeType(mimeType);
+    const fileName = documentFileName(documentId, extension);
+    const baseKey = activeDocumentKey(projectId, fileName);
 
-    // Create directory if it doesn't exist
-    await fs.mkdir(userDir, { recursive: true });
+    let storageKey = baseKey;
+    let storedBuffer = buffer;
+    let compressed = false;
 
-    // Write file to disk
-    await fs.writeFile(filePath, buffer);
-
-    return { storageKey };
-  }
-
-  /**
-   * Get a file as a Buffer
-   */
-  async getFile(userId: string, documentId: string): Promise<Buffer> {
-    const extensions = ['.pdf', '.jpg', '.png'];
-
-    for (const extension of extensions) {
-      const storageKey = `${userId}/${documentId}${extension}`;
-      const filePath = path.join(this.rootDir, storageKey);
-
-      try {
-        return await fs.readFile(filePath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
+    if (buffer.length > this.compressionThresholdBytes) {
+      const gz = await gzipAsync(buffer);
+      if (gz.length <= buffer.length * (1 - this.compressionMinSavingsRatio)) {
+        storageKey = `${baseKey}.gz`;
+        storedBuffer = gz;
+        compressed = true;
+        const savingPercent = ((1 - gz.length / buffer.length) * 100).toFixed(
+          1,
+        );
+        this.logger.debug(
+          `Compressed ${baseKey}: ${buffer.length} -> ${gz.length} bytes (${savingPercent}% saved)`,
+        );
       }
     }
 
-    throw new Error('File not found');
+    const fullPath = this.resolvePath(storageKey);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, storedBuffer);
+
+    return {
+      storageKey,
+      storedSizeBytes: storedBuffer.length,
+      compressed,
+    };
   }
 
-  /**
-   * Get full file system path from storage key
-   */
-  getPath(storageKey: string): string {
-    return path.join(this.rootDir, storageKey);
+  async readFile(storageKey: string): Promise<Buffer> {
+    const fullPath = this.resolvePath(storageKey);
+    const rawBuffer = await fs.readFile(fullPath);
+
+    if (isCompressedKey(storageKey)) {
+      return gunzipAsync(rawBuffer);
+    }
+    return rawBuffer;
   }
 
-  /**
-   * Move a file to a different storage key, creating the destination directory
-   */
+  createReadStream(storageKey: string): Readable {
+    const fullPath = this.resolvePath(storageKey);
+    const src = fsCreateReadStream(fullPath);
+
+    if (!isCompressedKey(storageKey)) {
+      return src;
+    }
+
+    const gunzip = zlib.createGunzip();
+    stream.pipeline(src, gunzip, (err) => {
+      if (err) {
+        gunzip.destroy(err);
+      }
+    });
+
+    return gunzip;
+  }
+
+  async writeStream(storageKey: string, source: Readable): Promise<number> {
+    const fullPath = this.resolvePath(storageKey);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    const dest = fsCreateWriteStream(fullPath);
+    await pipeline(source, dest);
+    const stat = await fs.stat(fullPath);
+    return stat.size;
+  }
+
+  async withLocalFile<T>(
+    storageKey: string,
+    fn: (localPath: string) => Promise<T>,
+  ): Promise<T> {
+    const fullPath = this.resolvePath(storageKey);
+    return fn(fullPath);
+  }
+
+  async exists(storageKey: string): Promise<boolean> {
+    try {
+      const fullPath = this.resolvePath(storageKey);
+      await fs.access(fullPath);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async getSize(storageKey: string): Promise<number> {
+    const fullPath = this.resolvePath(storageKey);
+    const stat = await fs.stat(fullPath);
+    return stat.size;
+  }
+
   async moveFile(fromKey: string, toKey: string): Promise<void> {
     if (fromKey === toKey) {
       return;
     }
 
-    const fromPath = path.join(this.rootDir, fromKey);
-    const toPath = path.join(this.rootDir, toKey);
+    const fromPath = this.resolvePath(fromKey);
+    const toPath = this.resolvePath(toKey);
 
     await fs.mkdir(path.dirname(toPath), { recursive: true });
 
     try {
       await fs.rename(fromPath, toPath);
     } catch (error) {
-      // rename fails across devices/mounts — fall back to copy + unlink
       if ((error as NodeJS.ErrnoException).code === 'EXDEV') {
         await fs.copyFile(fromPath, toPath);
         await fs.unlink(fromPath);
@@ -86,31 +205,14 @@ export class LocalBlobStore implements BlobStore {
     }
   }
 
-  /**
-   * Delete a file from disk
-   */
   async deleteFile(storageKey: string): Promise<void> {
-    const filePath = path.join(this.rootDir, storageKey);
     try {
-      await fs.unlink(filePath);
+      const fullPath = this.resolvePath(storageKey);
+      await fs.unlink(fullPath);
     } catch (error) {
-      // Ignore error if file doesn't exist
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
       }
-    }
-  }
-
-  private getExtensionFromMimeType(mimeType: string): string {
-    switch (mimeType) {
-      case 'application/pdf':
-        return '.pdf';
-      case 'image/jpeg':
-        return '.jpg';
-      case 'image/png':
-        return '.png';
-      default:
-        throw new Error(`Unsupported mime type: ${mimeType}`);
     }
   }
 }

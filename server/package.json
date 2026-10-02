@@ -21,7 +21,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "storage:migrate": "ts-node --transpile-only src/scripts/migrate-storage-layout.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -47,7 +48,8 @@
     "pdf-parse": "^1.1.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -61,6 +63,7 @@
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^8.0.1",
     "@types/supertest": "^6.0.2",
+    "@types/yauzl": "^3.4.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

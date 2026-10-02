@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { promises as fs } from 'fs';
 import { recognize } from 'tesseract.js';
 
 // PDF text extraction and image OCR service
@@ -8,15 +7,12 @@ export class ExtractionService {
   /**
    * Extract text from a PDF file
    */
-  async extractTextFromPdfPath(
-    pdfPath: string,
+  async extractTextFromPdfBuffer(
+    buffer: Buffer,
   ): Promise<{ text: string; pageCount: number }> {
-    // Read PDF file into buffer
-    const dataBuffer = await fs.readFile(pdfPath);
-
     // Parse PDF and extract text
     const pdfParse = require('pdf-parse');
-    const data = await pdfParse(dataBuffer);
+    const data = await pdfParse(buffer);
 
     // Normalize whitespace in extracted text
     const normalizedText = data.text.replace(/\s+/g, ' ').trim();
@@ -39,12 +35,10 @@ export class ExtractionService {
    * a handler (even a no-op) keeps that failure inside the awaited promise so
    * the caller's try/catch can handle it.
    */
-  async extractTextFromImagePath(
-    imagePath: string,
-  ): Promise<{ text: string }> {
+  async extractTextFromImageBuffer(buffer: Buffer): Promise<{ text: string }> {
     const {
       data: { text },
-    } = await recognize(imagePath, 'eng', { errorHandler: () => {} });
+    } = await recognize(buffer, 'eng', { errorHandler: () => {} });
 
     return { text: text.replace(/\s+/g, ' ').trim() };
   }

@@ -134,14 +134,14 @@ The extension is derived from the mime type (`pdf`, `jpg`, `png`).
 Soft-deleted documents keep the same shape behind a `deleted/` prefix while they sit in the recycle bin:
 
 ```
-server/data/deleted/{userId}/{documentId}.{ext}
+server/data/deleted/{projectId}/{documentId}.{ext}[.gz]
 ```
 
 Restoring moves the file back; only the 30-day purge (or an admin permanently deleting from the recycle bin) removes it from disk.
 
 This directory is gitignored. It is created automatically on first upload.
 
-Storage sits behind the `BlobStore` interface; the key format moves to a project-based layout when OneDrive storage lands in Phase 4/5.
+Storage sits behind the `BlobStore` interface with a project-based layout (`active/{projectId}/`, `archived/{projectId}.zip`, `deleted/{projectId}/`).
 
 ---
 
@@ -160,6 +160,9 @@ Storage sits behind the `BlobStore` interface; the key format moves to a project
 | `SMTP_USER` | `server/.env` | SMTP username |
 | `SMTP_PASS` | `server/.env` | SMTP password |
 | `SMTP_FROM` | `server/.env` | From address on outgoing mail |
+| `STORAGE_ROOT` | `server/.env` | Root directory for file storage (default: `./data`) |
+| `COMPRESSION_THRESHOLD_BYTES` | `server/.env` | Files larger than this in bytes are evaluated for compression (default: `5242880` = 5MB) |
+| `COMPRESSION_MIN_SAVINGS_RATIO` | `server/.env` | Minimum ratio savings needed to keep compressed file (default: `0.1` = 10%) |
 | `VITE_API_URL` | `client/.env.local` | Backend base URL |
 
 ---
@@ -243,7 +246,11 @@ See `docs/project-plan.md` for full detail.
 
 **Phase 2 – Access, Admin Console & Auditability** — complete. Admin console, project-scoped visibility (documents and projects), the registration/approval lifecycle, self-service email change, delete logging, soft delete with the 30-day recycle bin and its scheduled purge are all in place, and the 50MB upload limit has been removed.
 
-**Phases 3–7** — not started. The `/admin/filters`, `/admin/archive` and `/jobs` pages are static mock previews of Phases 3, 4 and 6 respectively — they render hard-coded data and call no API.
+**Phase 3 – Custom Filters & Search** — complete. Admin-configurable metadata fields (`/admin/filters`), search + filter combined, and OCR extraction for images.
+
+**Phase 4 – Project Archive & Storage Structure** — complete. Dedicated archive page (`/admin/archive`), project zip creation/extraction, recycle-bin integration, transparent file compression, and project-based storage structure.
+
+**Phases 5–7** — not started. The `/jobs` page is a static mock preview of Phase 6.
 
 ---
 

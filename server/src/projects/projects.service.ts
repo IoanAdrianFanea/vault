@@ -1,14 +1,17 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  Inject,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BLOB_STORE, type BlobStore } from '../storage/blob-store.interface';
-import {
-  toActiveStorageKey,
-  toDeletedStorageKey,
-} from '../common/deletion.constants';
+import { LIVE_PROJECT_WHERE } from './project-visibility';
+import { deletedDocumentKey, storageFileName } from '../storage/storage-keys';
 import { CreateProjectDto } from './dto/CreateProject.dto';
 import { UpdateProjectDto } from './dto/UpdateProject.dto';
-import { Inject } from '@nestjs/common';
 
 @Injectable()
 export class ProjectsService {
@@ -53,7 +56,7 @@ export class ProjectsService {
 
     if (user?.role === UserRole.ADMIN) {
       return this.prisma.project.findMany({
-        where: { deletedAt: null },
+        where: { ...LIVE_PROJECT_WHERE },
         select: projectSelect,
         orderBy: { name: 'asc' },
       });
@@ -61,7 +64,7 @@ export class ProjectsService {
 
     return this.prisma.project.findMany({
       where: {
-        deletedAt: null,
+        ...LIVE_PROJECT_WHERE,
         memberships: {
           some: {
             userId,
@@ -87,6 +90,30 @@ export class ProjectsService {
     });
   }
 
+  private async assertProjectEditable(
+    id: string,
+  ): Promise<{ id: string; name: string }> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        archivedAt: true,
+        archiveOperation: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (project.archivedAt !== null || project.archiveOperation !== null) {
+      throw new ConflictException('Archived projects are read-only');
+    }
+
+    return { id: project.id, name: project.name };
+  }
+
   /**
    * Soft delete a project — admin only.
    *
@@ -104,11 +131,22 @@ export class ProjectsService {
   async deleteProject(id: string, userId: string) {
     const project = await this.prisma.project.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        archivedAt: true,
+        archiveOperation: true,
+      },
     });
 
     if (!project) {
       throw new NotFoundException('Project not found');
+    }
+
+    if (project.archivedAt !== null || project.archiveOperation !== null) {
+      throw new ConflictException(
+        'Archived projects can only be deleted from the archive page',
+      );
     }
 
     const actor = await this.prisma.user.findUnique({
@@ -124,8 +162,10 @@ export class ProjectsService {
     const deletedAt = new Date();
 
     for (const document of activeDocuments) {
-      const originalStorageKey = toActiveStorageKey(document.storageKey);
-      const deletedStorageKey = toDeletedStorageKey(originalStorageKey);
+      const originalStorageKey = document.storageKey;
+      const deletedStorageKey = originalStorageKey
+        ? deletedDocumentKey(id, storageFileName(originalStorageKey))
+        : '';
 
       if (originalStorageKey) {
         try {
@@ -161,17 +201,26 @@ export class ProjectsService {
       ]);
     }
 
-    return this.prisma.project.update({
-      where: { id },
+    const updated = await this.prisma.project.updateMany({
+      where: { id, deletedAt: null, archivedAt: null, archiveOperation: null },
       data: {
         deletedAt,
         deletedById: userId,
         deletedByEmail: actor?.email ?? null,
       },
     });
+
+    if (updated.count === 0) {
+      throw new ConflictException('Project changed while it was being deleted');
+    }
+
+    return this.prisma.project.findUnique({
+      where: { id },
+    });
   }
 
   async updateProjectName(id: string, UpdateProjectDto: UpdateProjectDto) {
+    await this.assertProjectEditable(id);
     return this.prisma.project.update({
       where: { id },
       data: { name: UpdateProjectDto.name },
@@ -195,6 +244,7 @@ export class ProjectsService {
   }
 
   async addProjectMember(id: string, userId: string) {
+    await this.assertProjectEditable(id);
     return this.prisma.projectMembership.create({
       data: {
         projectId: id,
@@ -204,6 +254,7 @@ export class ProjectsService {
   }
 
   async removeProjectMember(id: string, userId: string) {
+    await this.assertProjectEditable(id);
     return this.prisma.projectMembership.deleteMany({
       where: {
         projectId: id,

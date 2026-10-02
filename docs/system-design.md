@@ -115,27 +115,34 @@ The purge is safe to run repeatedly and concurrently: each document is claimed w
 ## Archive Flow (Phase 4)
 
 ### Archive
-1. Admin opens project management page
-2. Selects "Archive" on a project
-3. All files in the project zipped into `archived/{projectId}.zip`
-4. `archivedAt` set on the project
-5. Project hidden from main views; appears in archive page
+1. Admin opens project management page and clicks "Archive" on an active project
+2. Operation claimed (`archiveOperation: ARCHIVING`); prevents concurrent modifications
+3. Live documents are streamed into `archived/{projectId}.zip.partial` alongside `manifest.json`
+4. If any document files are missing on disk, they are flagged as `missing: true` in the manifest and surfaced as a warning to the admin
+5. Zip file is verified with `yauzl` against the manifest and moved to `archived/{projectId}.zip`
+6. `archivedAt`, `archivedById`, `archivedByEmail`, and `archiveSizeBytes` are set in an interactive transaction verifying no document additions occurred
+7. Active blobs for archived documents are deleted from `active/{projectId}/`
+8. In-progress claim is released; project is hidden from all main views and displayed on `/admin/archive`
 
 ### Unarchive
-1. Admin opens archive page
-2. Selects "Unarchive" on a project
-3. Zip extracted, files restored to `active/{projectId}/`
-4. `archivedAt` cleared
-5. Project re-appears in main views
+1. Admin opens archive page and clicks "Restore"
+2. Operation claimed (`archiveOperation: UNARCHIVING`)
+3. Manifest verified; files extracted and saved through `BlobStore` back to `active/{projectId}/`
+4. Document storage keys updated, `archivedAt` cleared in a single transaction
+5. Archive zip `archived/{projectId}.zip` is deleted; claim released; project re-appears in main views
 
 ### Download (without unarchive)
-1. Admin downloads zip directly from archive page
-2. Project remains archived
+1. Admin downloads zip directly from `/admin/archive` via `GET /archive/:id/download`
+2. Downloaded zip contains files under `files/` along with `manifest.json`
+3. Project remains archived
 
-### Permanent delete
-1. Admin can permanently delete an archived project
-2. Zip removed from storage
-3. Database records purged
+### Delete Archived Project (via Recycle Bin)
+1. Admin clicks "Delete" on an archived project in `/admin/archive`
+2. Operation claimed (`archiveOperation: DELETING`)
+3. Archive zip is moved to `deleted/{projectId}/archive.zip`
+4. Project and its documents are soft-deleted with shared `deletedAt` and audit logs written to `DeletionLog`
+5. Restoring from the recycle bin within 30 days moves the zip back to `archived/` and returns the project to **Archived** status
+6. Purge after 30 days (or permanent delete from the recycle bin) removes the zip and purges database records
 
 ---
 
@@ -154,8 +161,8 @@ The purge is safe to run repeatedly and concurrently: each document is claimed w
 1. Admin creates a project via the project management page (name only)
 2. Admin adds users via the membership modal
 3. Assigned users see the project and can upload to it
-4. Admin can rename or delete (project delete is permanent and cascades to its documents — the recycle bin only covers individual document deletions)
-5. Admin can archive when work is complete — Phase 4, UI stub only
+4. Admin can rename or delete (deleting soft-deletes the project and its active documents to the recycle bin for 30-day recovery)
+5. Admin can archive active projects when work is complete, managing archived projects on `/admin/archive`
 
 Note: a newly created project has no members. Even the creating admin must add members explicitly before non-admins can use it.
 
