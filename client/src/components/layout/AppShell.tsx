@@ -1,62 +1,145 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ProfileSettingsModal } from './ProfileSettingsModal';
-import { authService } from '../../api/auth';
-import { documentsService, type DocumentStatus, type DocumentStatusCounts } from '../../api/documents';
+import { authService, type User } from '../../api/auth';
+import {
+  documentsService,
+  type DocumentStatus,
+  type DocumentStatusCounts,
+} from '../../api/documents';
+import {
+  Avatar,
+  ButtonLink,
+  DOCUMENT_STATUS_ORDER,
+  documentStatusStyles,
+  IconButton,
+  Input,
+} from '../ui';
 
 interface AppShellProps {
   children: ReactNode;
 }
 
-const statusOptions: Array<{ label: string; value: DocumentStatus }> = [
-  { label: 'Uploaded', value: 'UPLOADED' },
-  { label: 'Queued', value: 'QUEUED' },
-  { label: 'Processing', value: 'PROCESSING' },
-  { label: 'Processed', value: 'PROCESSED' },
-  { label: 'Failed', value: 'FAILED' },
-];
+const STATUS_FILTER_COLLAPSED_KEY = 'shell:statusFilterCollapsed';
+
+type ShellUserState =
+  | { status: 'loading' }
+  | { status: 'ready'; user: User }
+  | { status: 'error' };
+
+function readStatusFilterCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(STATUS_FILTER_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function formatCount(count: number): string {
+  return count.toLocaleString('en-GB');
+}
+
+interface ShellNavLinkProps {
+  to: string;
+  label: string;
+  icon: string;
+  isActive: boolean;
+  count?: number | null;
+}
+
+function ShellNavLink({ to, label, icon, isActive, count }: ShellNavLinkProps) {
+  return (
+    <Link
+      to={to}
+      aria-current={isActive ? 'page' : undefined}
+      className={`flex items-center gap-2 h-8 px-2 rounded text-body transition-colors ${
+        isActive
+          ? 'bg-selected text-ink font-medium'
+          : 'text-ink-body hover:bg-line/60'
+      }`}
+    >
+      <span
+        className={`material-symbols-outlined text-[18px] leading-none ${
+          isActive ? 'text-accent' : 'text-ink-muted'
+        }`}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="flex-1 truncate">{label}</span>
+      {typeof count === 'number' && (
+        <span className="text-small tabular-nums text-ink-muted">
+          {formatCount(count)}
+        </span>
+      )}
+    </Link>
+  );
+}
 
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
-  const [statusCounts, setStatusCounts] = useState<DocumentStatusCounts>({
-    UPLOADED: 0,
-    QUEUED: 0,
-    PROCESSING: 0,
-    PROCESSED: 0,
-    FAILED: 0,
-  });
-  
+
   const isDocumentsPage = location.pathname.startsWith('/documents');
   const isJobsPage = location.pathname.startsWith('/jobs');
   const isAdminPage = location.pathname.startsWith('/admin');
+  const isSearchPage = location.pathname.startsWith('/search');
+
+  const [userState, setUserState] = useState<ShellUserState>(() => {
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('accessToken')) {
+      return { status: 'error' };
+    }
+    return { status: 'loading' };
+  });
+  const [statusCounts, setStatusCounts] = useState<DocumentStatusCounts | null>(null);
+
+  const urlQuery = isSearchPage ? (searchParams.get('q') ?? '') : null;
+  const [syncedUrlQuery, setSyncedUrlQuery] = useState<string | null>(urlQuery);
+  const [searchQuery, setSearchQuery] = useState(urlQuery ?? '');
+
+  if (urlQuery !== syncedUrlQuery) {
+    setSyncedUrlQuery(urlQuery);
+    if (urlQuery !== null) setSearchQuery(urlQuery);
+  }
+
+  const [isStatusFilterCollapsed, setIsStatusFilterCollapsed] = useState<boolean>(
+    readStatusFilterCollapsed,
+  );
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
+  const isMountedRef = useRef(false);
+
+  const isAdmin = userState.status === 'ready' && userState.user.role === 'ADMIN';
+
   const selectedStatus = useMemo(() => {
     const statusParam = searchParams.get('status');
-    return statusOptions.find((status) => status.value === statusParam)?.value;
+    return DOCUMENT_STATUS_ORDER.find((status) => status === statusParam);
   }, [searchParams]);
-  const statusFilters = useMemo(
-    () =>
-      statusOptions.map((status) => ({
-        ...status,
-        count: statusCounts[status.value],
-      })),
-    [statusCounts],
+
+  const totalCount = statusCounts
+    ? DOCUMENT_STATUS_ORDER.reduce((acc, status) => acc + (statusCounts[status] ?? 0), 0)
+    : null;
+
+  const visibleStatuses = DOCUMENT_STATUS_ORDER.filter(
+    (status) => !isStatusFilterCollapsed || status === selectedStatus,
   );
 
   useEffect(() => {
+    isMountedRef.current = true;
     let isActive = true;
     const accessToken = sessionStorage.getItem('accessToken');
 
     if (!accessToken) {
-      setIsAdmin(false);
-      setIsCheckingAdmin(false);
       return () => {
         isActive = false;
+        isMountedRef.current = false;
       };
     }
 
@@ -64,21 +147,37 @@ export function AppShell({ children }: AppShellProps) {
       .getMe(accessToken)
       .then((user) => {
         if (!isActive) return;
-        setIsAdmin(user.role === 'ADMIN');
+        setUserState({ status: 'ready', user });
       })
       .catch(() => {
         if (!isActive) return;
-        setIsAdmin(false);
-      })
-      .finally(() => {
-        if (!isActive) return;
-        setIsCheckingAdmin(false);
+        setUserState({ status: 'error' });
       });
 
     return () => {
       isActive = false;
+      isMountedRef.current = false;
     };
   }, []);
+
+  const refreshCurrentUser = async () => {
+    const accessToken = sessionStorage.getItem('accessToken');
+    if (!accessToken) return;
+
+    try {
+      const user = await authService.getMe(accessToken);
+      if (isMountedRef.current) {
+        setUserState({ status: 'ready', user });
+      }
+    } catch {
+      // Keep current state on error
+    }
+  };
+
+  const handleProfileSettingsClose = () => {
+    setIsProfileSettingsOpen(false);
+    void refreshCurrentUser();
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -101,8 +200,7 @@ export function AppShell({ children }: AppShellProps) {
     };
   }, [location.pathname]);
 
-  // Handle search form submission
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim().length >= 2) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
@@ -124,138 +222,195 @@ export function AppShell({ children }: AppShellProps) {
     setSearchParams(nextParams);
   };
 
+  const toggleStatusFilterCollapsed = () => {
+    const next = !isStatusFilterCollapsed;
+    setIsStatusFilterCollapsed(next);
+    try {
+      sessionStorage.setItem(STATUS_FILTER_COLLAPSED_KEY, String(next));
+    } catch {
+      // Ignore storage failure
+    }
+  };
+
   return (
     <>
-      <div className="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 overflow-hidden h-screen flex flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 shrink-0 h-16 z-20 relative">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center size-8 rounded-lg bg-primary/10 text-primary">
-            <span className="material-symbols-outlined">folder_open</span>
-          </div>
-          <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">DocIndex Manager</h1>
-        </div>
-        
-        <form onSubmit={handleSearch} className="flex-1 max-w-xl px-8">
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
-              <span className="material-symbols-outlined text-[20px]">search</span>
+      <div className="h-screen flex flex-col overflow-hidden bg-canvas font-sans">
+        <header className="relative z-header h-16 shrink-0 flex items-center gap-6 px-4 bg-canvas border-b border-line">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="size-9 rounded-md bg-accent text-white flex items-center justify-center">
+              <span className="material-symbols-outlined text-[20px] leading-none" aria-hidden="true">
+                lock
+              </span>
             </div>
-            <input
-              className="block w-full p-2 pl-10 text-sm text-slate-900 border border-slate-200 rounded-lg bg-slate-50 focus:ring-primary focus:border-primary dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:text-white dark:focus:ring-primary dark:focus:border-primary transition-all"
-              placeholder="Search documents or content..."
-              type="text"
+            <div>
+              <p className="text-panel text-ink">DocIndex Manager</p>
+              <p className="text-small text-ink-muted">Site document register</p>
+            </div>
+          </div>
+
+          <form role="search" onSubmit={handleSearch} className="flex-1 min-w-0 max-w-2xl">
+            <Input
+              type="search"
+              leadingIcon="search"
+              placeholder="Search files or document text…"
+              aria-label="Search files or document text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2">
-              <kbd className="inline-flex items-center border border-slate-200 dark:border-slate-600 rounded px-2 text-xs font-sans font-medium text-slate-400 dark:text-slate-500">
-                ⌘K
-              </kbd>
-            </div>
-          </div>
-        </form>
+          </form>
 
-        <div className="flex items-center gap-4">
-          <Link
-            to="/upload"
-            className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors shadow-sm shadow-blue-200 dark:shadow-none"
-          >
-            <span className="material-symbols-outlined text-[18px]">cloud_upload</span>
-            <span>Upload</span>
-          </Link>
-          <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-          <button
-            onClick={() => setIsProfileSettingsOpen(true)}
-            className="h-9 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-primary hover:text-primary transition-colors inline-flex items-center gap-1.5"
-          >
-            <span className="material-symbols-outlined text-[18px]">manage_accounts</span>
-            <span className="text-xs font-semibold">Account</span>
-          </button>
-        </div>
-      </header>
+          <div className="ml-auto flex items-center gap-4 shrink-0">
+            <ButtonLink to="/upload" variant="dark" icon="add">
+              Upload document
+            </ButtonLink>
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <aside className="w-64 flex flex-col border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 overflow-y-auto shrink-0 py-6 px-4">
-          <div className="mb-8">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-2">Views</h3>
-            <nav className="space-y-1">
-              <Link
-                className={`flex items-center gap-3 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  isDocumentsPage
-                    ? 'bg-white dark:bg-slate-800 text-primary shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-                to="/documents"
-              >
-                <span className="material-symbols-outlined text-[20px]">grid_view</span>
-                All Documents
-              </Link>
-              <Link
-                className={`flex items-center gap-3 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  isJobsPage
-                    ? 'bg-white dark:bg-slate-800 text-primary shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-                to="/jobs"
-              >
-                <span className="material-symbols-outlined text-[20px]">work</span>
-                Jobs
-              </Link>
-              {!isCheckingAdmin && isAdmin && (
-                <Link
-                  className={`flex items-center gap-3 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    isAdminPage
-                      ? 'bg-white dark:bg-slate-800 text-primary shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                  to="/admin/projects"
-                >
-                  <span className="material-symbols-outlined text-[20px]">admin_panel_settings</span>
-                  Admin Console
-                </Link>
-              )}
-            </nav>
-          </div>
-
-          <div className="mb-8">
-            <div className="flex items-center justify-between px-2 mb-3">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</h3>
-            </div>
-            <div className="space-y-1">
-              {statusFilters.map((status) => (
-                <label
-                  key={status.label}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleStatusToggle(status.value);
-                  }}
-                  className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer group"
-                >
-                  <input
-                    checked={selectedStatus === status.value}
-                    className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4 bg-white pointer-events-none"
-                    type="checkbox"
-                    readOnly
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setIsProfileSettingsOpen(true)}
+              className="flex items-center gap-2.5 h-10 pl-2 pr-1 rounded hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {userState.status === 'loading' ? (
+                <>
+                  <span className="sr-only">Account</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="h-3 w-24 rounded bg-line" aria-hidden="true" />
+                    <span className="h-2.5 w-12 rounded bg-line" aria-hidden="true" />
+                  </div>
+                  <span className="size-8 rounded-full bg-line" aria-hidden="true" />
+                </>
+              ) : userState.status === 'ready' ? (
+                <>
+                  <div className="flex flex-col items-end min-w-0 text-right">
+                    <span className="max-w-[180px] truncate text-body font-medium text-ink">
+                      {userState.user.fullName?.trim() || userState.user.email}
+                    </span>
+                    <span className="text-small text-ink-muted">
+                      {userState.user.role === 'ADMIN' ? 'Admin' : 'User'}
+                    </span>
+                  </div>
+                  <Avatar
+                    fullName={userState.user.fullName}
+                    email={userState.user.email}
                   />
-                  <span className="flex-1 text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white">
-                    {status.label}
-                  </span>
-                  <span className="text-xs text-slate-400 bg-slate-200/50 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                    {status.count}
-                  </span>
-                </label>
-              ))}
-            </div>
+                </>
+              ) : (
+                <>
+                  <span className="text-body font-medium text-ink">Account</span>
+                  <Avatar />
+                </>
+              )}
+            </button>
           </div>
-        </aside>
+        </header>
 
-        {children}
-      </div>
+        <div className="relative flex flex-1 overflow-hidden">
+          <aside
+            aria-label="Sidebar"
+            className="w-48 shrink-0 flex flex-col gap-6 overflow-y-auto bg-subtle border-r border-line px-3 py-4"
+          >
+            <nav aria-labelledby="shell-registers-heading">
+              <h2
+                id="shell-registers-heading"
+                className="px-2 mb-1.5 text-label uppercase text-ink-muted"
+              >
+                Registers
+              </h2>
+              <ul className="space-y-0.5">
+                <li>
+                  <ShellNavLink
+                    to="/documents"
+                    label="All documents"
+                    icon="description"
+                    isActive={isDocumentsPage}
+                    count={totalCount}
+                  />
+                </li>
+                <li>
+                  <ShellNavLink
+                    to="/jobs"
+                    label="Jobs"
+                    icon="folder"
+                    isActive={isJobsPage}
+                  />
+                </li>
+                {isAdmin && (
+                  <li>
+                    <ShellNavLink
+                      to="/admin/projects"
+                      label="Admin settings"
+                      icon="settings"
+                      isActive={isAdminPage}
+                    />
+                  </li>
+                )}
+              </ul>
+            </nav>
+
+            <section aria-labelledby="shell-status-heading">
+              <div className="flex items-center justify-between pl-2 mb-1.5">
+                <h2
+                  id="shell-status-heading"
+                  className="text-label uppercase text-ink-muted"
+                >
+                  Status filter
+                </h2>
+                <IconButton
+                  size="sm"
+                  icon={isStatusFilterCollapsed ? 'expand_more' : 'expand_less'}
+                  label={
+                    isStatusFilterCollapsed
+                      ? 'Expand status filter'
+                      : 'Collapse status filter'
+                  }
+                  aria-expanded={!isStatusFilterCollapsed}
+                  aria-controls="shell-status-list"
+                  onClick={toggleStatusFilterCollapsed}
+                />
+              </div>
+
+              <ul id="shell-status-list" className="space-y-0.5">
+                {visibleStatuses.map((status) => {
+                  const isActive = selectedStatus === status;
+                  const style = documentStatusStyles[status];
+
+                  return (
+                    <li key={status}>
+                      <button
+                        type="button"
+                        aria-pressed={isActive}
+                        onClick={() => handleStatusToggle(status)}
+                        className={`w-full flex items-center gap-2 h-7 px-2 rounded text-body text-left transition-colors ${
+                          isActive
+                            ? 'bg-selected text-ink font-medium'
+                            : 'text-ink-body hover:bg-line/60'
+                        }`}
+                      >
+                        <span
+                          className={`size-1.5 shrink-0 rounded-full ${style.dotClassName}`}
+                          aria-hidden="true"
+                        />
+                        <span className="flex-1 truncate">{style.label}</span>
+                        {statusCounts !== null && (
+                          <span className="text-small tabular-nums text-ink-muted">
+                            {formatCount(statusCounts[status])}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          </aside>
+
+          {children}
+        </div>
       </div>
 
       <ProfileSettingsModal
         isOpen={isProfileSettingsOpen}
-        onClose={() => setIsProfileSettingsOpen(false)}
+        onClose={handleProfileSettingsClose}
       />
     </>
   );
