@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AdminTabs } from '../../components/admin/AdminTabs';
 import {
   getDeletedDocuments,
   getDeletedProjects,
@@ -12,157 +11,38 @@ import {
   type DeletedProject,
 } from '../../api/recycleBin';
 import { getProjects, type AdminProject } from '../../api/projects';
+import { AdminSection } from '../../components/admin/AdminSection';
+import { useRangeSelection } from '../../hooks/useRangeSelection';
+import {
+  Badge,
+  BulkBar,
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  FormField,
+  InlineAlert,
+  Modal,
+  SegmentedControl,
+  Select,
+  TableCell,
+  TableHeaderCell,
+  TableRow,
+  TextAction,
+  getTabId,
+  getTabPanelId,
+} from '../../components/ui';
+import { formatCount, formatCountLabel, formatDate, formatFileSize } from '../../utils/format';
+import { getExpiryDisplay } from '../../components/admin/recycleBinExpiry';
 
 type PendingAction =
-  | { type: 'restore-document'; document: DeletedDocument; requiresProjectChoice: boolean }
+  | { type: 'restore-document-choice'; document: DeletedDocument }
   | { type: 'purge-document'; document: DeletedDocument }
   | { type: 'restore-project'; project: DeletedProject }
   | { type: 'purge-project'; project: DeletedProject }
+  | { type: 'bulk-purge'; ids: string[] }
   | null;
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function fileIcon(mimeType: string): string {
-  return mimeType === 'application/pdf' ? 'picture_as_pdf' : 'image';
-}
-
-function expiryBadge(daysRemaining: number) {
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-full text-label-sm font-semibold ${
-        daysRemaining <= 5
-          ? 'bg-error-container/50 text-error'
-          : 'bg-surface-container-high text-on-surface-variant'
-      }`}
-    >
-      {daysRemaining === 0 ? 'Today' : `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`}
-    </span>
-  );
-}
-
-interface ConfirmModalProps {
-  action: PendingAction;
-  isLoading: boolean;
-  activeProjects: AdminProject[];
-  selectedProjectId: string;
-  onSelectedProjectIdChange: (id: string) => void;
-  onConfirm: () => void;
-  onClose: () => void;
-}
-
-function ConfirmModal({
-  action,
-  isLoading,
-  activeProjects,
-  selectedProjectId,
-  onSelectedProjectIdChange,
-  onConfirm,
-  onClose,
-}: ConfirmModalProps) {
-  if (!action) return null;
-
-  const isPurge = action.type === 'purge-document' || action.type === 'purge-project';
-  const isRestoreDocumentWithChoice =
-    action.type === 'restore-document' && action.requiresProjectChoice;
-
-  const title = isPurge
-    ? action.type === 'purge-project'
-      ? 'Delete Project Permanently'
-      : 'Delete Permanently'
-    : action.type === 'restore-project'
-      ? 'Restore Project'
-      : 'Restore Document';
-
-  const message = (() => {
-    switch (action.type) {
-      case 'purge-document':
-        return `"${action.document.originalFilename}" and its file will be removed for good. The deletion log entry is kept for auditing. This cannot be undone.`;
-      case 'purge-project':
-        return `"${action.project.name}" and every remaining document in it will be removed for good. Deletion log entries are kept for auditing. This cannot be undone.`;
-      case 'restore-project':
-        return action.project.isArchived
-          ? `"${action.project.name}" will be returned to the archive. Its documents stay hidden until the project is unarchived.`
-          : `"${action.project.name}" and the documents that were active when it was deleted will be restored and become visible again.`;
-      case 'restore-document':
-        return action.requiresProjectChoice
-          ? `Choose which project "${action.document.originalFilename}" should be restored into.`
-          : `"${action.document.originalFilename}" will be returned to ${action.document.projectName} and become visible again.`;
-      default:
-        return '';
-    }
-  })();
-
-  const confirmLabel = isPurge ? 'Delete Permanently' : action.type === 'restore-project' ? 'Restore Project' : 'Restore';
-  const btnClass = isPurge
-    ? 'bg-error text-on-error hover:bg-error/90'
-    : 'bg-primary text-on-primary hover:bg-primary/90';
-  const confirmDisabled = isLoading || (isRestoreDocumentWithChoice && !selectedProjectId);
-
-  return (
-    <div
-      className="fixed inset-0 bg-scrim/40 backdrop-blur-sm flex items-center justify-center z-50"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isLoading) onClose();
-      }}
-    >
-      <div className="bg-surface rounded-2xl shadow-2xl border border-outline-variant/20 w-full max-w-sm mx-4">
-        <div className="px-6 pt-6 pb-4">
-          <h2 className="text-title-md font-semibold text-on-surface">{title}</h2>
-          <p className="text-body-sm text-on-surface-variant mt-2">{message}</p>
-
-          {isRestoreDocumentWithChoice && (
-            <select
-              value={selectedProjectId}
-              onChange={(e) => onSelectedProjectIdChange(e.target.value)}
-              className="mt-4 w-full rounded-lg border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-body-sm text-on-surface"
-            >
-              <option value="">Select a project…</option>
-              {activeProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div className="flex justify-end gap-3 px-6 pb-6">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={confirmDisabled}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${btnClass}`}
-          >
-            {isLoading && (
-              <span className="material-symbols-outlined text-[16px] animate-spin">
-                progress_activity
-              </span>
-            )}
-            {isLoading ? 'Please wait…' : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 
 export default function AdminRecycleBin() {
   const [documents, setDocuments] = useState<DeletedDocument[]>([]);
@@ -171,6 +51,7 @@ export default function AdminRecycleBin() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [tab, setTab] = useState<'documents' | 'projects'>('documents');
   const [selectedProject, setSelectedProject] = useState<DeletedProject | null>(null);
   const [projectDocuments, setProjectDocuments] = useState<DeletedDocument[]>([]);
   const [isLoadingProjectDocuments, setIsLoadingProjectDocuments] = useState(false);
@@ -178,45 +59,58 @@ export default function AdminRecycleBin() {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [isActing, setIsActing] = useState(false);
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
+  const [pageAlert, setPageAlert] = useState<{
+    tone: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
+
+  const selection = useRangeSelection(
+    documents.map((d) => d.id),
+    tab,
+  );
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
-      const [docs, projects, projectOptions] = await Promise.all([
+      const [docs, projects, allProjects] = await Promise.all([
         getDeletedDocuments(),
         getDeletedProjects(),
         getProjects(),
       ]);
       setDocuments(docs);
       setDeletedProjects(projects);
-      setActiveProjects(projectOptions);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load the recycle bin');
+      setActiveProjects(allProjects);
+    } catch {
+      setError('Failed to load the recycle bin. Please try refreshing.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   const loadProjectDocuments = useCallback(async (projectId: string) => {
     setIsLoadingProjectDocuments(true);
-    setError('');
     try {
-      setProjectDocuments(await getDeletedProjectDocuments(projectId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load the project documents');
+      const docs = await getDeletedProjectDocuments(projectId);
+      setProjectDocuments(docs);
+    } catch {
+      setPageAlert({
+        tone: 'error',
+        message: 'Failed to load project documents.',
+      });
     } finally {
       setIsLoadingProjectDocuments(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   const openProject = (project: DeletedProject) => {
     setSelectedProject(project);
-    void loadProjectDocuments(project.id);
+    loadProjectDocuments(project.id);
   };
 
   const closeProject = () => {
@@ -225,389 +119,840 @@ export default function AdminRecycleBin() {
   };
 
   const handleRefresh = () => {
-    void load();
+    load();
     if (selectedProject) {
-      void loadProjectDocuments(selectedProject.id);
+      loadProjectDocuments(selectedProject.id);
     }
   };
 
-  const handleConfirm = async () => {
-    if (!pendingAction) return;
+  const reloadAfterAction = useCallback(
+    (removedProjectId?: string) => {
+      load();
+      if (selectedProject) {
+        if (removedProjectId && selectedProject.id === removedProjectId) {
+          closeProject();
+        } else {
+          loadProjectDocuments(selectedProject.id);
+        }
+      }
+    },
+    [load, loadProjectDocuments, selectedProject],
+  );
+
+  const handleRestoreDocument = async (doc: DeletedDocument) => {
+    if (!doc.restorable) return;
+    if (doc.requiresProjectChoice) {
+      setSelectedProjectId('');
+      setPendingAction({ type: 'restore-document-choice', document: doc });
+      return;
+    }
 
     setIsActing(true);
-    setError('');
+    setPageAlert(null);
     try {
-      let leftSelectedProject = false;
-
-      switch (pendingAction.type) {
-        case 'restore-document':
-          await restoreDocument(
-            pendingAction.document.id,
-            pendingAction.requiresProjectChoice ? selectedProjectId : undefined,
-          );
-          break;
-        case 'purge-document':
-          await permanentlyDeleteDocument(pendingAction.document.id);
-          break;
-        case 'restore-project':
-          await restoreProject(pendingAction.project.id);
-          leftSelectedProject = selectedProject?.id === pendingAction.project.id;
-          break;
-        case 'purge-project':
-          await permanentlyDeleteProject(pendingAction.project.id);
-          leftSelectedProject = selectedProject?.id === pendingAction.project.id;
-          break;
-      }
-
-      setPendingAction(null);
-      setSelectedProjectId('');
-
-      if (leftSelectedProject) {
-        setSelectedProject(null);
-        setProjectDocuments([]);
-      }
-
-      await load();
-      if (selectedProject && !leftSelectedProject) {
-        await loadProjectDocuments(selectedProject.id);
-      }
+      await restoreDocument(doc.id);
+      setPageAlert({
+        tone: 'success',
+        message: `"${doc.originalFilename}" was restored to ${doc.projectName}.`,
+      });
+      selection.retain(
+        Array.from(selection.selectedIds).filter((id) => id !== doc.id),
+      );
+      reloadAfterAction();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed');
+      setPageAlert({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'Action failed',
+      });
     } finally {
       setIsActing(false);
     }
   };
 
-  const retentionDays =
-    documents[0]?.retentionDays ?? deletedProjects[0]?.retentionDays ?? 30;
+  const handleConfirm = async () => {
+    if (!pendingAction) return;
+    setIsActing(true);
+    setPageAlert(null);
 
-  const renderDocumentsTable = (
-    docs: DeletedDocument[],
-    options: { loading: boolean; emptyMessage: string; showProjectColumn: boolean; requiresProjectChoiceOnRestore: boolean },
-  ) => (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden shadow-sm">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr className="border-b border-outline-variant/10 bg-surface-container-low/50 text-label-md font-label uppercase tracking-wider text-outline">
-            <th className="px-6 py-4 font-medium w-1/3">Document</th>
-            {options.showProjectColumn && (
-              <th className="px-6 py-4 font-medium w-1/6">Project</th>
-            )}
-            <th className="px-6 py-4 font-medium w-1/6">Deleted By</th>
-            <th className="px-6 py-4 font-medium w-1/6">Deleted On</th>
-            <th className="px-6 py-4 font-medium w-1/12">Expires</th>
-            <th className="px-6 py-4 font-medium w-1/6 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="text-body-md text-on-surface divide-y divide-outline-variant/5">
-          {options.loading ? (
-            <tr>
-              <td
-                colSpan={options.showProjectColumn ? 6 : 5}
-                className="px-6 py-5 text-center text-on-surface-variant"
-              >
-                Loading...
-              </td>
-            </tr>
-          ) : docs.length === 0 ? (
-            <tr>
-              <td
-                colSpan={options.showProjectColumn ? 6 : 5}
-                className="px-6 py-5 text-center text-on-surface-variant"
-              >
-                {options.emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            docs.map((doc) => (
-              <tr
-                key={doc.id}
-                className="hover:bg-surface-container-low/30 transition-colors group"
-              >
-                <td className="px-6 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-error-container text-error flex items-center justify-center">
-                      <span className="material-symbols-outlined text-sm">
-                        {fileIcon(doc.mimeType)}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="font-semibold text-on-surface block truncate">
-                        {doc.originalFilename}
-                      </span>
-                      <span className="text-label-sm text-on-surface-variant">
-                        {formatSize(doc.sizeBytes)}
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                {options.showProjectColumn && (
-                  <td className="px-6 py-5 text-on-surface-variant">{doc.projectName}</td>
-                )}
-                <td className="px-6 py-5 text-on-surface-variant">
-                  {doc.deletedByName || doc.deletedByEmail || 'Unknown'}
-                </td>
-                <td className="px-6 py-5 text-on-surface-variant">{formatDate(doc.deletedAt)}</td>
-                <td className="px-6 py-5">{expiryBadge(doc.daysRemaining)}</td>
-                <td className="px-6 py-5 text-right">
-                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {doc.restorable ? (
-                      <button
-                        onClick={() =>
-                          setPendingAction({
-                            type: 'restore-document',
-                            document: doc,
-                            requiresProjectChoice:
-                              options.requiresProjectChoiceOnRestore ||
-                              doc.requiresProjectChoice,
-                          })
-                        }
-                        className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors"
-                        title="Restore"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">restore</span>
-                      </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="p-1.5 text-on-surface-variant/40 cursor-not-allowed rounded"
-                        title="Stored in the project archive – restore the whole project"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">restore</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setPendingAction({ type: 'purge-document', document: doc })}
-                      className="p-1.5 text-outline hover:text-error hover:bg-error-container/20 rounded transition-colors"
-                      title="Delete Permanently"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        delete_forever
-                      </span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+    try {
+      if (pendingAction.type === 'restore-document-choice') {
+        const doc = pendingAction.document;
+        await restoreDocument(doc.id, selectedProjectId);
+        const chosenProject = activeProjects.find((p) => p.id === selectedProjectId);
+        setPageAlert({
+          tone: 'success',
+          message: `"${doc.originalFilename}" was restored to ${chosenProject?.name ?? 'project'}.`,
+        });
+        selection.retain(
+          Array.from(selection.selectedIds).filter((id) => id !== doc.id),
+        );
+        setPendingAction(null);
+        reloadAfterAction();
+      } else if (pendingAction.type === 'purge-document') {
+        const doc = pendingAction.document;
+        await permanentlyDeleteDocument(doc.id);
+        selection.retain(
+          Array.from(selection.selectedIds).filter((id) => id !== doc.id),
+        );
+        setPendingAction(null);
+        reloadAfterAction();
+      } else if (pendingAction.type === 'restore-project') {
+        const proj = pendingAction.project;
+        await restoreProject(proj.id);
+        setPageAlert({
+          tone: 'success',
+          message: `"${proj.name}" was restored.`,
+        });
+        setPendingAction(null);
+        reloadAfterAction(proj.id);
+      } else if (pendingAction.type === 'purge-project') {
+        const proj = pendingAction.project;
+        await permanentlyDeleteProject(proj.id);
+        setPendingAction(null);
+        reloadAfterAction(proj.id);
+      } else if (pendingAction.type === 'bulk-purge') {
+        let failedCount = 0;
+        const failedIds: string[] = [];
+        for (const id of pendingAction.ids) {
+          try {
+            await permanentlyDeleteDocument(id);
+          } catch {
+            failedCount++;
+            failedIds.push(id);
+          }
+        }
+        selection.retain(failedIds);
+        if (failedCount > 0) {
+          setPageAlert({
+            tone: 'warning',
+            message: `${formatCountLabel(failedCount, 'document', 'documents')} couldn't be deleted.`,
+          });
+        }
+        setPendingAction(null);
+        reloadAfterAction();
+      }
+    } catch (err) {
+      setPageAlert({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'Action failed',
+      });
+      setPendingAction(null);
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    const selectedDocs = documents.filter((d) => selection.selectedIds.has(d.id));
+    const restorableNow = selectedDocs.filter(
+      (d) => d.restorable && !d.requiresProjectChoice,
+    );
+    const skipped = selectedDocs.filter(
+      (d) => !d.restorable || d.requiresProjectChoice,
+    );
+
+    if (restorableNow.length === 0) {
+      const names = skipped.map((d) => `"${d.originalFilename}"`).join(', ');
+      setPageAlert({
+        tone: 'warning',
+        message: `None of the selected documents can be restored in bulk: ${names}. Restore them one at a time to choose a project, or restore their whole project.`,
+      });
+      return;
+    }
+
+    setIsBulkRunning(true);
+    setPageAlert(null);
+    let restoredCount = 0;
+    let failedCount = 0;
+    const failedIds: string[] = [];
+
+    for (const doc of restorableNow) {
+      try {
+        await restoreDocument(doc.id);
+        restoredCount++;
+      } catch {
+        failedCount++;
+        failedIds.push(doc.id);
+      }
+    }
+
+    const skippedIds = skipped.map((d) => d.id);
+    selection.retain([...skippedIds, ...failedIds]);
+    reloadAfterAction();
+
+    if (skipped.length === 0 && failedCount === 0) {
+      setPageAlert({
+        tone: 'success',
+        message: `Restored ${formatCountLabel(restoredCount, 'document', 'documents')}.`,
+      });
+    } else {
+      const parts: string[] = [];
+      if (restoredCount > 0) {
+        parts.push(`Restored ${formatCountLabel(restoredCount, 'document', 'documents')}.`);
+      }
+      if (skipped.length > 0) {
+        const skippedNames = skipped.map((d) => `"${d.originalFilename}"`).join(', ');
+        parts.push(`Skipped ${skippedNames}: restore these one at a time to choose a project, or restore their whole project.`);
+      }
+      if (failedCount > 0) {
+        parts.push(`${formatCountLabel(failedCount, 'document', 'documents')} couldn't be restored.`);
+      }
+      setPageAlert({
+        tone: 'warning',
+        message: parts.join(' '),
+      });
+    }
+
+    setIsBulkRunning(false);
+  };
+
+  const isBinEmpty =
+    !isLoading &&
+    !error &&
+    documents.length === 0 &&
+    deletedProjects.length === 0;
 
   return (
-    <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900 overflow-hidden">
-      <ConfirmModal
-        action={pendingAction}
-        isLoading={isActing}
-        activeProjects={activeProjects}
-        selectedProjectId={selectedProjectId}
-        onSelectedProjectIdChange={setSelectedProjectId}
-        onConfirm={handleConfirm}
-        onClose={() => {
-          setPendingAction(null);
-          setSelectedProjectId('');
-        }}
-      />
-
-      <div className="bg-surface pt-6 px-10 shrink-0 sticky top-0 z-10">
-        <AdminTabs />
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-10 max-w-7xl mx-auto w-full">
-        {selectedProject ? (
-          <>
-            <button
-              onClick={closeProject}
-              className="mb-4 flex items-center gap-1 text-label-md font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+    <AdminSection
+      bulkBarSpace={
+        !selectedProject &&
+        tab === 'documents' &&
+        selection.selectedIds.size > 0
+      }
+      toolbarStart={
+        !selectedProject ? (
+          <SegmentedControl
+            label="Recycle bin contents"
+            idPrefix="recycle-bin"
+            value={tab}
+            onChange={setTab}
+            items={[
+              {
+                value: 'documents',
+                label: 'Documents',
+                count: documents.length,
+              },
+              {
+                value: 'projects',
+                label: 'Projects',
+                count: deletedProjects.length,
+              },
+            ]}
+          />
+        ) : undefined
+      }
+      toolbarEnd={
+        !selectedProject ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="refresh"
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
+            Refresh
+          </Button>
+        ) : undefined
+      }
+    >
+      {selectedProject ? (
+        <div className="space-y-4">
+          <TextAction
+            tone="muted"
+            onClick={closeProject}
+            className="inline-flex items-center gap-1 mb-1"
+          >
+            <span
+              className="material-symbols-outlined text-[14px]"
+              aria-hidden="true"
             >
-              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-              Back to Recycle Bin
-            </button>
+              arrow_back
+            </span>
+            <span>Back to recycle bin</span>
+          </TextAction>
 
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <h1 className="text-headline-sm font-headline font-bold text-on-surface">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-section text-ink">
                   {selectedProject.name}
-                </h1>
+                </h2>
                 {selectedProject.isArchived && (
-                  <span className="px-2.5 py-0.5 rounded text-label-sm font-semibold bg-tertiary-container text-tertiary-dim border border-tertiary-dim/20">
+                  <Badge
+                    tone="slate"
+                    title="Stored in the project archive – restore the whole project"
+                  >
                     Archived
-                  </span>
+                  </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPendingAction({ type: 'restore-project', project: selectedProject })}
-                  className="bg-primary text-on-primary px-4 py-2 rounded-lg flex items-center gap-2 text-label-md font-semibold hover:opacity-90 transition-opacity"
-                >
-                  <span className="material-symbols-outlined text-sm">restore</span>
-                  Restore Project
-                </button>
-                <button
-                  onClick={() => setPendingAction({ type: 'purge-project', project: selectedProject })}
-                  className="bg-error text-on-error px-4 py-2 rounded-lg flex items-center gap-2 text-label-md font-semibold hover:opacity-90 transition-opacity"
-                >
-                  <span className="material-symbols-outlined text-sm">delete_forever</span>
-                  Delete Permanently
-                </button>
-              </div>
-            </div>
-            <p className="text-body-sm text-on-surface-variant mb-8">
-              Deleted by {selectedProject.deletedByName || selectedProject.deletedByEmail || 'Unknown'} on{' '}
-              {formatDate(selectedProject.deletedAt)}.{' '}
-              {selectedProject.isArchived
-                ? 'This project was archived when deleted. Swept documents can only be restored with the whole project.'
-                : 'Restoring an individual document below lets you choose which project to send it to.'}
-            </p>
-
-            {error && (
-              <p className="mb-4 text-label-sm text-error flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px]">error</span>
-                {error}
+              <p className="mt-0.5 text-small text-ink-muted tabular-nums">
+                {formatCountLabel(
+                  selectedProject.documentCount,
+                  'document',
+                  'documents',
+                )}{' '}
+                · Deleted {formatDate(selectedProject.deletedAt)} by{' '}
+                {selectedProject.deletedByName ??
+                  selectedProject.deletedByEmail ??
+                  '—'}
               </p>
-            )}
-
-            {renderDocumentsTable(projectDocuments, {
-              loading: isLoadingProjectDocuments,
-              emptyMessage: 'This project has no deleted documents',
-              showProjectColumn: false,
-              requiresProjectChoiceOnRestore: true,
-            })}
-          </>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-2">
-              <h1 className="text-headline-sm font-headline font-bold text-on-surface">
-                Recycle Bin
-              </h1>
-              <button
-                onClick={handleRefresh}
-                className="bg-surface-container-high text-on-surface px-4 py-2 rounded-lg flex items-center gap-2 text-label-md font-semibold hover:opacity-90 transition-opacity"
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon="restore_from_trash"
+                onClick={() =>
+                  setPendingAction({
+                    type: 'restore-project',
+                    project: selectedProject,
+                  })
+                }
               >
-                <span className="material-symbols-outlined text-sm">refresh</span>
-                Refresh
-              </button>
+                Restore
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                icon="delete_forever"
+                onClick={() =>
+                  setPendingAction({
+                    type: 'purge-project',
+                    project: selectedProject,
+                  })
+                }
+              >
+                Delete permanently
+              </Button>
             </div>
-            <p className="text-body-sm text-on-surface-variant mb-8">
-              Deleted projects and documents are kept for {retentionDays} days and are then
-              permanently removed. Deletions stay in the audit log either way.
-            </p>
+          </div>
 
-            {error && (
-              <p className="mb-4 text-label-sm text-error flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px]">error</span>
-                {error}
-              </p>
-            )}
+          {pageAlert && (
+            <InlineAlert
+              tone={pageAlert.tone}
+              onDismiss={() => setPageAlert(null)}
+            >
+              {pageAlert.message}
+            </InlineAlert>
+          )}
 
-            <h2 className="text-title-md font-semibold text-on-surface mb-3">Deleted Projects</h2>
-            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden shadow-sm mb-10">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-outline-variant/10 bg-surface-container-low/50 text-label-md font-label uppercase tracking-wider text-outline">
-                    <th className="px-6 py-4 font-medium w-1/3">Project</th>
-                    <th className="px-6 py-4 font-medium w-1/6">Documents</th>
-                    <th className="px-6 py-4 font-medium w-1/6">Deleted By</th>
-                    <th className="px-6 py-4 font-medium w-1/6">Deleted On</th>
-                    <th className="px-6 py-4 font-medium w-1/12">Expires</th>
-                    <th className="px-6 py-4 font-medium w-1/6 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="text-body-md text-on-surface divide-y divide-outline-variant/5">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-5 text-center text-on-surface-variant">
-                        Loading...
-                      </td>
-                    </tr>
-                  ) : deletedProjects.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-5 text-center text-on-surface-variant">
-                        No deleted projects
-                      </td>
-                    </tr>
-                  ) : (
-                    deletedProjects.map((project) => (
-                      <tr
-                        key={project.id}
-                        className="hover:bg-surface-container-low/30 transition-colors group cursor-pointer"
-                        onClick={() => openProject(project)}
-                      >
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded bg-error-container text-error flex items-center justify-center">
-                              <span className="material-symbols-outlined text-sm">folder</span>
-                            </div>
-                            <span className="font-semibold text-on-surface block truncate">
-                              {project.name}
-                            </span>
-                            {project.isArchived && (
-                              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-tertiary-container text-tertiary-dim border border-tertiary-dim/20 shrink-0">
-                                Archived
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 text-on-surface-variant">
-                          {project.documentCount}
-                        </td>
-                        <td className="px-6 py-5 text-on-surface-variant">
-                          {project.deletedByName || project.deletedByEmail || 'Unknown'}
-                        </td>
-                        <td className="px-6 py-5 text-on-surface-variant">
-                          {formatDate(project.deletedAt)}
-                        </td>
-                        <td className="px-6 py-5">{expiryBadge(project.daysRemaining)}</td>
-                        <td className="px-6 py-5 text-right">
-                          <div
-                            className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+          {isLoadingProjectDocuments && projectDocuments.length === 0 ? null : projectDocuments.length === 0 ? (
+            <EmptyState
+              icon="description"
+              title="No deleted documents"
+            />
+          ) : (
+            <DataTable
+              label={`Deleted documents in ${selectedProject.name}`}
+              fixed
+              busy={isLoadingProjectDocuments}
+            >
+              <thead>
+                <TableRow>
+                  <TableHeaderCell>Document</TableHeaderCell>
+                  <TableHeaderCell>Deleted by</TableHeaderCell>
+                  <TableHeaderCell className="w-[110px]">
+                    Deleted
+                  </TableHeaderCell>
+                  <TableHeaderCell className="w-[110px]">
+                    Expires
+                  </TableHeaderCell>
+                </TableRow>
+              </thead>
+              <tbody>
+                {projectDocuments.map((doc) => {
+                  const exp = getExpiryDisplay(doc.daysRemaining);
+
+                  return (
+                    <TableRow key={doc.id}>
+                      <TableCell>
+                        <span
+                          className="block truncate font-medium text-ink"
+                          title={doc.originalFilename}
+                        >
+                          {doc.originalFilename}
+                        </span>
+                        <span className="block text-small text-ink-muted tabular-nums">
+                          {formatFileSize(doc.sizeBytes)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="truncate">
+                        {doc.deletedByName ?? doc.deletedByEmail ?? '—'}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-small text-ink-muted tabular-nums">
+                        {formatDate(doc.deletedAt)}
+                      </TableCell>
+                      <TableCell>
+                        {exp.tone ? (
+                          <Badge tone={exp.tone}>{exp.label}</Badge>
+                        ) : (
+                          <span className="text-small text-ink-muted tabular-nums">
+                            {exp.label}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </tbody>
+            </DataTable>
+          )}
+        </div>
+      ) : (
+        <>
+          {pageAlert && (
+            <InlineAlert
+              tone={pageAlert.tone}
+              onDismiss={() => setPageAlert(null)}
+            >
+              {pageAlert.message}
+            </InlineAlert>
+          )}
+
+          {error && <InlineAlert tone="error">{error}</InlineAlert>}
+
+          {isBinEmpty ? (
+            <EmptyState
+              className="rounded border border-line"
+              icon="delete"
+              title="Recycle bin is empty"
+              description="Deleted documents and projects stay here for 30 days before they're permanently removed."
+            />
+          ) : tab === 'documents' ? (
+            <div
+              role="tabpanel"
+              id={getTabPanelId('recycle-bin', 'documents')}
+              aria-labelledby={getTabId('recycle-bin', 'documents')}
+            >
+              {isLoading && documents.length === 0 ? null : documents.length === 0 ? (
+                <EmptyState
+                  icon="description"
+                  title="No deleted documents"
+                />
+              ) : (
+                <DataTable
+                  label="Deleted documents"
+                  fixed
+                  busy={isLoading}
+                >
+                  <thead>
+                    <TableRow>
+                      <TableHeaderCell align="center" className="w-8">
+                        <Checkbox
+                          aria-label="Select all documents"
+                          checked={selection.allSelected}
+                          indeterminate={
+                            selection.someSelected && !selection.allSelected
+                          }
+                          onChange={(e) => selection.setAll(e.target.checked)}
+                        />
+                      </TableHeaderCell>
+                      <TableHeaderCell>Document</TableHeaderCell>
+                      <TableHeaderCell>Project</TableHeaderCell>
+                      <TableHeaderCell>Deleted by</TableHeaderCell>
+                      <TableHeaderCell className="w-[110px]">
+                        Deleted
+                      </TableHeaderCell>
+                      <TableHeaderCell className="w-[100px]">
+                        Expires
+                      </TableHeaderCell>
+                      <TableHeaderCell align="end" className="w-[150px]">
+                        Actions
+                      </TableHeaderCell>
+                    </TableRow>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => {
+                      const isSelected = selection.selectedIds.has(doc.id);
+                      const exp = getExpiryDisplay(doc.daysRemaining);
+
+                      return (
+                        <TableRow
+                          key={doc.id}
+                          selected={isSelected}
+                        >
+                          <TableCell
+                            align="center"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <button
-                              onClick={() => openProject(project)}
-                              className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors"
-                              title="View Documents"
+                            <Checkbox
+                              aria-label={`Select ${doc.originalFilename}`}
+                              checked={isSelected}
+                              onChange={(e) =>
+                                selection.toggle(
+                                  doc.id,
+                                  (e.nativeEvent as MouseEvent).shiftKey,
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className="block truncate font-medium text-ink"
+                              title={doc.originalFilename}
                             >
-                              <span className="material-symbols-outlined text-[18px]">
-                                folder_open
+                              {doc.originalFilename}
+                            </span>
+                            <span className="block text-small text-ink-muted tabular-nums">
+                              {formatFileSize(doc.sizeBytes)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="truncate">
+                            {doc.projectName}
+                          </TableCell>
+                          <TableCell className="truncate">
+                            {doc.deletedByName ?? doc.deletedByEmail ?? '—'}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-small text-ink-muted tabular-nums">
+                            {formatDate(doc.deletedAt)}
+                          </TableCell>
+                          <TableCell>
+                            {exp.tone ? (
+                              <Badge tone={exp.tone}>{exp.label}</Badge>
+                            ) : (
+                              <span className="text-small text-ink-muted tabular-nums">
+                                {exp.label}
                               </span>
-                            </button>
-                            <button
-                              onClick={() => setPendingAction({ type: 'restore-project', project })}
-                              className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors"
-                              title="Restore Project"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">restore</span>
-                            </button>
-                            <button
-                              onClick={() => setPendingAction({ type: 'purge-project', project })}
-                              className="p-1.5 text-outline hover:text-error hover:bg-error-container/20 rounded transition-colors"
-                              title="Delete Permanently"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">
-                                delete_forever
+                            )}
+                          </TableCell>
+                          <TableCell
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex items-center gap-1.5">
+                              {doc.restorable ? (
+                                <TextAction
+                                  tone="accent"
+                                  aria-label={`Restore ${doc.originalFilename}`}
+                                  disabled={isActing}
+                                  onClick={() => handleRestoreDocument(doc)}
+                                >
+                                  Restore
+                                </TextAction>
+                              ) : (
+                                <span title="Restore the whole project from the Projects tab">
+                                  <TextAction
+                                    tone="accent"
+                                    aria-label={`Restore ${doc.originalFilename}`}
+                                    disabled
+                                  >
+                                    Restore
+                                  </TextAction>
+                                </span>
+                              )}
+                              <span
+                                className="text-small text-line-strong"
+                                aria-hidden="true"
+                              >
+                                /
                               </span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                              <TextAction
+                                tone="danger"
+                                aria-label={`Permanently delete ${doc.originalFilename}`}
+                                onClick={() =>
+                                  setPendingAction({
+                                    type: 'purge-document',
+                                    document: doc,
+                                  })
+                                }
+                              >
+                                Delete
+                              </TextAction>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </tbody>
+                </DataTable>
+              )}
             </div>
+          ) : (
+            <div
+              role="tabpanel"
+              id={getTabPanelId('recycle-bin', 'projects')}
+              aria-labelledby={getTabId('recycle-bin', 'projects')}
+            >
+              {isLoading && deletedProjects.length === 0 ? null : deletedProjects.length === 0 ? (
+                <EmptyState
+                  icon="folder_delete"
+                  title="No deleted projects"
+                />
+              ) : (
+                <DataTable
+                  label="Deleted projects"
+                  fixed
+                  busy={isLoading}
+                >
+                  <thead>
+                    <TableRow>
+                      <TableHeaderCell>Project</TableHeaderCell>
+                      <TableHeaderCell align="end" className="w-[100px]">
+                        Documents
+                      </TableHeaderCell>
+                      <TableHeaderCell>Deleted by</TableHeaderCell>
+                      <TableHeaderCell className="w-[110px]">
+                        Deleted
+                      </TableHeaderCell>
+                      <TableHeaderCell className="w-[100px]">
+                        Expires
+                      </TableHeaderCell>
+                      <TableHeaderCell align="end" className="w-[200px]">
+                        Actions
+                      </TableHeaderCell>
+                    </TableRow>
+                  </thead>
+                  <tbody>
+                    {deletedProjects.map((proj) => {
+                      const exp = getExpiryDisplay(proj.daysRemaining);
 
-            <h2 className="text-title-md font-semibold text-on-surface mb-3">Deleted Documents</h2>
-            {renderDocumentsTable(documents, {
-              loading: isLoading,
-              emptyMessage: 'The recycle bin is empty',
-              showProjectColumn: true,
-              requiresProjectChoiceOnRestore: false,
-            })}
-          </>
-        )}
-      </div>
-    </main>
+                      return (
+                        <TableRow
+                          key={proj.id}
+                          onClick={() => openProject(proj)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="truncate font-medium text-ink"
+                                title={proj.name}
+                              >
+                                {proj.name}
+                              </span>
+                              {proj.isArchived && (
+                                <Badge
+                                  tone="slate"
+                                  title="Stored in the project archive – restore the whole project"
+                                >
+                                  Archived
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell align="end">
+                            <span className="text-small text-ink-muted tabular-nums">
+                              {formatCount(proj.documentCount)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="truncate">
+                            {proj.deletedByName ?? proj.deletedByEmail ?? '—'}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-small text-ink-muted tabular-nums">
+                            {formatDate(proj.deletedAt)}
+                          </TableCell>
+                          <TableCell>
+                            {exp.tone ? (
+                              <Badge tone={exp.tone}>{exp.label}</Badge>
+                            ) : (
+                              <span className="text-small text-ink-muted tabular-nums">
+                                {exp.label}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex items-center gap-1.5">
+                              <TextAction
+                                tone="accent"
+                                onClick={() => openProject(proj)}
+                              >
+                                View
+                              </TextAction>
+                              <span
+                                className="text-small text-line-strong"
+                                aria-hidden="true"
+                              >
+                                /
+                              </span>
+                              <TextAction
+                                tone="accent"
+                                onClick={() =>
+                                  setPendingAction({
+                                    type: 'restore-project',
+                                    project: proj,
+                                  })
+                                }
+                              >
+                                Restore
+                              </TextAction>
+                              <span
+                                className="text-small text-line-strong"
+                                aria-hidden="true"
+                              >
+                                /
+                              </span>
+                              <TextAction
+                                tone="danger"
+                                onClick={() =>
+                                  setPendingAction({
+                                    type: 'purge-project',
+                                    project: proj,
+                                  })
+                                }
+                              >
+                                Delete
+                              </TextAction>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </tbody>
+                </DataTable>
+              )}
+            </div>
+          )}
+
+          {!selectedProject &&
+            tab === 'documents' &&
+            selection.selectedIds.size > 0 && (
+              <BulkBar
+                selectedCount={selection.selectedIds.size}
+                busy={isBulkRunning || isActing}
+                onClear={selection.clear}
+                actions={[
+                  {
+                    key: 'restore',
+                    label: 'Restore selected',
+                    icon: 'restore_from_trash',
+                    onClick: handleBulkRestore,
+                  },
+                  {
+                    key: 'purge',
+                    label: 'Delete permanently',
+                    icon: 'delete_forever',
+                    onClick: () =>
+                      setPendingAction({
+                        type: 'bulk-purge',
+                        ids: [...selection.selectedIds],
+                      }),
+                  },
+                ]}
+              />
+            )}
+        </>
+      )}
+
+      {pendingAction?.type === 'restore-document-choice' && (
+        <Modal
+          isOpen
+          onClose={() => setPendingAction(null)}
+          size="sm"
+          title="Restore to which project?"
+          closeDisabled={isActing}
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setPendingAction(null)}
+                disabled={isActing}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={isActing}
+                disabled={!selectedProjectId}
+                onClick={handleConfirm}
+              >
+                Restore
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-body text-ink-body">
+              "{pendingAction.document.originalFilename}" — The original project
+              has been deleted or archived.
+            </p>
+            <FormField label="Project" htmlFor="restore-target-project">
+              <Select
+                id="restore-target-project"
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                disabled={isActing || activeProjects.length === 0}
+              >
+                <option value="">Choose a project</option>
+                {activeProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            {activeProjects.length === 0 && (
+              <InlineAlert tone="info">
+                There are no active projects to restore into. Create a project
+                first.
+              </InlineAlert>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      <ConfirmDialog
+        isOpen={pendingAction?.type === 'purge-document'}
+        title="Delete permanently?"
+        confirmLabel="Delete permanently"
+        isConfirming={isActing}
+        onConfirm={handleConfirm}
+        onCancel={() => setPendingAction(null)}
+        message={
+          pendingAction?.type === 'purge-document'
+            ? `Permanently delete "${pendingAction.document.originalFilename}"? This can't be undone.`
+            : ''
+        }
+      />
+
+      <ConfirmDialog
+        isOpen={pendingAction?.type === 'purge-project'}
+        title="Delete permanently?"
+        confirmLabel="Delete permanently"
+        isConfirming={isActing}
+        onConfirm={handleConfirm}
+        onCancel={() => setPendingAction(null)}
+        message={
+          pendingAction?.type === 'purge-project'
+            ? `Permanently delete "${pendingAction.project.name}" and its ${formatCountLabel(
+                pendingAction.project.documentCount,
+                'document',
+                'documents',
+              )}? This can't be undone.`
+            : ''
+        }
+      />
+
+      <ConfirmDialog
+        isOpen={pendingAction?.type === 'restore-project'}
+        tone="default"
+        title="Restore project?"
+        confirmLabel="Restore"
+        isConfirming={isActing}
+        onConfirm={handleConfirm}
+        onCancel={() => setPendingAction(null)}
+        message={
+          pendingAction?.type === 'restore-project'
+            ? `"${pendingAction.project.name}" and the documents that were active when it was deleted will be restored.`
+            : ''
+        }
+      />
+
+      <ConfirmDialog
+        isOpen={pendingAction?.type === 'bulk-purge'}
+        title={
+          pendingAction?.type === 'bulk-purge'
+            ? `Delete ${formatCountLabel(pendingAction.ids.length, 'document', 'documents')} permanently?`
+            : ''
+        }
+        confirmLabel="Delete permanently"
+        isConfirming={isActing}
+        onConfirm={handleConfirm}
+        onCancel={() => setPendingAction(null)}
+        message={<p>This can't be undone.</p>}
+      />
+    </AdminSection>
   );
 }

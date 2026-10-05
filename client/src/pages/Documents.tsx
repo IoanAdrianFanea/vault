@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import type { Document, DocumentStatus } from '../types';
 import {
   documentsService,
-  type Document as ApiDocument,
   type DocumentStatusCounts,
 } from '../api/documents';
 import { projectsService, type Project } from '../api/projects';
@@ -22,10 +21,9 @@ import {
 import {
   formatCount,
   formatCountLabel,
-  formatDateTime,
-  formatFileSize,
 } from '../utils/format';
 import { downloadCsv } from '../utils/csv';
+import { toUiDocument } from '../components/documents/documentConvert';
 import {
   buildDocumentsCsv,
   documentsCsvFileName,
@@ -65,24 +63,6 @@ interface PageAlert {
 }
 
 const EMPTY_DOCUMENTS: Document[] = [];
-
-// Helper to convert API document to UI document
-const convertApiDocument = (apiDoc: ApiDocument): Document => ({
-  id: apiDoc.id,
-  fileName: apiDoc.originalFilename,
-  mimeType: apiDoc.mimeType,
-  fileSize: formatFileSize(apiDoc.sizeBytes),
-  status: apiDoc.status,
-  uploadDate: formatDateTime(apiDoc.uploadedAt),
-  uploadedBy: apiDoc.uploadedByEmail,
-  errorMessage: apiDoc.errorMessage ?? undefined,
-  pageCount: apiDoc.pageCount ?? undefined,
-  extractedText: apiDoc.textPreview ?? undefined,
-  filterValues: apiDoc.filterValues,
-  projectName: apiDoc.projectName,
-  sizeBytes: apiDoc.sizeBytes,
-  uploadedAt: apiDoc.uploadedAt,
-});
 
 export default function Documents() {
   const { id } = useParams<{ id: string }>();
@@ -169,7 +149,7 @@ export default function Documents() {
       .then(([apiDocs, counts]) => {
         if (!isActive) return;
         setSnapshot({
-          documents: apiDocs.map(convertApiDocument),
+          documents: apiDocs.map(toUiDocument),
           counts,
           updatedAt: new Date(),
         });
@@ -209,7 +189,7 @@ export default function Documents() {
       .getDocument(id)
       .then((apiDoc) => {
         if (!isActive) return;
-        setSelectedDocument(convertApiDocument(apiDoc));
+        setSelectedDocument(toUiDocument(apiDoc));
       })
       .catch((err) => {
         if (!isActive) return;

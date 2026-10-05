@@ -23,18 +23,8 @@
   }
   
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
+    background-color: theme('colors.line-strong');
     border-radius: 20px;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  
-  .spinner {
-    animation: spin 1s linear infinite;
   }
 }
 

@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Job } from '../types';
 import { JobsTable } from '../components/jobs/JobsTable';
 import { JobDrawer } from '../components/jobs/JobDrawer';
-import { ComingSoonToast } from '../components/common/ComingSoonToast';
+import { EmptyState, InlineAlert, PageHeader } from '../components/ui';
 
 // Mock data
 const mockJobs: Job[] = [
@@ -12,9 +11,9 @@ const mockJobs: Job[] = [
     type: 'EXPORT',
     title: 'Export PDF Bundle',
     status: 'COMPLETED',
-    createdAt: 'Today, 10:23 AM',
+    createdAt: '2026-10-26T10:23:00',
     createdBy: 'Sarah M.',
-    completedAt: 'Oct 26, 10:25 AM',
+    completedAt: '2026-10-26T10:25:00',
     duration: '2m 14s',
     fileSize: '45.2 MB',
     fileCount: 18,
@@ -24,7 +23,7 @@ const mockJobs: Job[] = [
     type: 'INDEX',
     title: 'Index Site Plans',
     status: 'PROCESSING',
-    createdAt: 'Today, 09:45 AM',
+    createdAt: '2026-10-26T09:45:00',
     createdBy: 'System',
     fileCount: 12,
   },
@@ -33,7 +32,7 @@ const mockJobs: Job[] = [
     type: 'EXTRACT',
     title: 'Export Daily Logs',
     status: 'FAILED',
-    createdAt: 'Yesterday, 04:15 PM',
+    createdAt: '2026-10-25T16:15:00',
     createdBy: 'Mike R.',
     errorMessage: 'Insufficient permissions to access log directory',
   },
@@ -42,9 +41,9 @@ const mockJobs: Job[] = [
     type: 'INDEX',
     title: 'Index Safety Reports',
     status: 'COMPLETED',
-    createdAt: 'Yesterday, 02:00 PM',
+    createdAt: '2026-10-25T14:00:00',
     createdBy: 'Sarah M.',
-    completedAt: 'Yesterday, 02:15 PM',
+    completedAt: '2026-10-25T14:15:00',
     duration: '15m 23s',
   },
   {
@@ -52,9 +51,9 @@ const mockJobs: Job[] = [
     type: 'EXPORT',
     title: 'Export Blueprints',
     status: 'COMPLETED',
-    createdAt: 'Oct 24, 11:30 AM',
+    createdAt: '2026-10-24T11:30:00',
     createdBy: 'Admin',
-    completedAt: 'Oct 24, 11:35 AM',
+    completedAt: '2026-10-24T11:35:00',
     duration: '5m 12s',
     fileSize: '89.7 MB',
   },
@@ -63,17 +62,8 @@ const mockJobs: Job[] = [
 export default function Jobs() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [showComingSoon, setShowComingSoon] = useState(true);
 
-  useEffect(() => {
-    if (id) {
-      const job = mockJobs.find((j) => j.id === id);
-      setSelectedJob(job || null);
-    } else {
-      setSelectedJob(null);
-    }
-  }, [id]);
+  const selectedJob = id ? mockJobs.find((j) => j.id === id) ?? null : null;
 
   const handleSelectJob = (jobId: string) => {
     navigate(`/jobs/${jobId}`);
@@ -83,59 +73,38 @@ export default function Jobs() {
     navigate('/jobs');
   };
 
+  const handleRetryJob = (_jobId: string) => {
+    void _jobId;
+    // TODO(backend): endpoint to re-run a failed job.
+  };
+
   return (
     <>
-      <main className="flex-1 flex flex-col min-w-0 bg-white relative">
-        {/* Coming Soon Banner */}
-        <div className="shrink-0 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-6 py-3">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-primary">info</span>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                Preview Mode: Jobs & Queue Processing
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                This page shows mock data. Full job queue functionality requires <span className="font-semibold">Phase 3 - Async Processing</span> and will be available in a future update.
-              </p>
-            </div>
-          </div>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pt-3 pb-4">
+          <PageHeader
+            title="Jobs"
+            description="Exports, indexing and text extraction runs."
+          />
+          <InlineAlert tone="info">
+            Preview — jobs and background processing arrive in Phase 6. This page
+            shows sample data.
+          </InlineAlert>
+          {mockJobs.length === 0 ? (
+            <EmptyState icon="work_history" title="No jobs yet" />
+          ) : (
+            <JobsTable
+              jobs={mockJobs}
+              selectedJobId={selectedJob?.id}
+              onSelectJob={handleSelectJob}
+              onRetryJob={handleRetryJob}
+            />
+          )}
         </div>
-
-        <div className="h-12 border-b border-border-subtle flex items-center justify-between px-6 bg-white sticky top-0 z-10">
-          <div className="flex items-center gap-4 text-sm text-text-muted">
-            <span className="font-medium text-text-main">All Jobs</span>
-            <span className="w-1 h-1 rounded-full bg-border-subtle"></span>
-            <span>Sorted by Date</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="p-1.5 hover:bg-background-subtle rounded text-text-muted hover:text-text-main transition-colors">
-              <span className="material-symbols-outlined">refresh</span>
-            </button>
-            <button className="p-1.5 hover:bg-background-subtle rounded text-text-muted hover:text-text-main transition-colors">
-              <span className="material-symbols-outlined">filter_list</span>
-            </button>
-            <button className="p-1.5 hover:bg-background-subtle rounded text-text-muted hover:text-text-main transition-colors">
-              <span className="material-symbols-outlined">more_horiz</span>
-            </button>
-          </div>
-        </div>
-
-        <JobsTable jobs={mockJobs} onSelectJob={handleSelectJob} />
-
-        {selectedJob && (
-          <>
-            <div className="absolute inset-0 bg-slate-900/10 backdrop-blur-[1px] z-20"></div>
-            <JobDrawer job={selectedJob} onClose={handleCloseDrawer} />
-          </>
-        )}
       </main>
-
-      <ComingSoonToast
-        isOpen={showComingSoon}
-        onClose={() => setShowComingSoon(false)}
-        feature="Jobs & Queue Processing"
-        phase="Phase 3"
-      />
+      {selectedJob && (
+        <JobDrawer job={selectedJob} onClose={handleCloseDrawer} />
+      )}
     </>
   );
 }

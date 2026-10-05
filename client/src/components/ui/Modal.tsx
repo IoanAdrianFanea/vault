@@ -4,6 +4,7 @@ import {
   useRef,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton } from './IconButton';
@@ -16,19 +17,21 @@ export interface ModalProps {
   description?: ReactNode;
   headerAside?: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'ml' | 'lg' | 'xl';
   layer?: 'modal' | 'confirm';
   role?: 'dialog' | 'alertdialog';
   showCloseButton?: boolean;
   closeDisabled?: boolean;
   ariaDescribedBy?: string;
   bodyClassName?: string;
+  initialFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
-const sizeClasses: Record<'sm' | 'md' | 'lg' | 'xl', string> = {
+const sizeClasses: Record<'sm' | 'md' | 'ml' | 'lg' | 'xl', string> = {
   sm: 'max-w-[400px]',
   md: 'max-w-[480px]',
+  ml: 'max-w-[640px]',
   lg: 'max-w-[720px]',
   xl: 'max-w-[1040px]',
 };
@@ -47,6 +50,7 @@ export function Modal({
   closeDisabled = false,
   ariaDescribedBy,
   bodyClassName,
+  initialFocusRef,
   children,
 }: ModalProps) {
   const titleId = useId();
@@ -61,13 +65,17 @@ export function Modal({
       returnElementRef.current = document.activeElement;
     }
 
-    const panel = panelRef.current;
-    if (panel) {
-      const focusables = getFocusableElements(panel);
-      if (focusables.length > 0) {
-        focusables[0].focus();
-      } else {
-        panel.focus();
+    if (initialFocusRef?.current) {
+      initialFocusRef.current.focus();
+    } else {
+      const panel = panelRef.current;
+      if (panel) {
+        const focusables = getFocusableElements(panel);
+        if (focusables.length > 0) {
+          focusables[0].focus();
+        } else {
+          panel.focus();
+        }
       }
     }
 
@@ -76,7 +84,7 @@ export function Modal({
         returnElementRef.current.focus();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, initialFocusRef]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') {

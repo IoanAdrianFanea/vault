@@ -11,7 +11,7 @@ export interface UserSummary {
   createdAt: string;
 }
 
-export interface UserWithStatus extends UserSummary {}
+export type UserWithStatus = UserSummary;
 
 export interface CreateUserPayload {
   fullName: string;

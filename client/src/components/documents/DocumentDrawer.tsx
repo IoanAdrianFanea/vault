@@ -1,170 +1,255 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Document } from '../../types';
+import type { FilterDefinition } from '../../api/filters';
+import { documentsService } from '../../api/documents';
 import { downloadDocument } from '../../api/exports';
-import { InlineAlert, StatusBadge } from '../ui';
+import { formatDateTime, formatIsoDate } from '../../utils/format';
+import { sortFilterDefinitions } from './documentFilters';
+import {
+  Button,
+  Drawer,
+  InlineAlert,
+  Spinner,
+  StatusBadge,
+  TextAction,
+} from '../ui';
 
-interface DocumentDrawerProps {
-  document: Document;
+export type DrawerDocumentState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; document: Document };
+
+export interface DocumentDrawerProps {
+  state: DrawerDocumentState;
+  filterDefinitions: FilterDefinition[];
   onClose: () => void;
   onDelete: (documentId: string) => void;
+  onOpenPreview: (document: Document) => void;
 }
 
-export function DocumentDrawer({ document, onClose, onDelete }: DocumentDrawerProps) {
+type TextState =
+  | { status: 'loading' }
+  | { status: 'ready'; text: string }
+  | { status: 'none' }
+  | { status: 'error' };
+
+export function DocumentDrawer({
+  state,
+  filterDefinitions,
+  onClose,
+  onDelete,
+  onOpenPreview,
+}: DocumentDrawerProps) {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState<{ documentId: string; message: string } | null>(null);
-  const isImage = document.mimeType.startsWith('image/');
+  const [downloadError, setDownloadError] = useState<{
+    documentId: string;
+    message: string;
+  } | null>(null);
+  const [textState, setTextState] = useState<TextState>({ status: 'loading' });
+
+  const readyDocument = state.status === 'ready' ? state.document : null;
+  const docId = readyDocument?.id;
+  const docStatus = readyDocument?.status;
+
+  useEffect(() => {
+    if (!docId) return;
+
+    if (docStatus !== 'PROCESSED') {
+      setTextState({ status: 'none' });
+      return;
+    }
+
+    let isActive = true;
+    setTextState({ status: 'loading' });
+
+    documentsService
+      .getDocumentText(docId)
+      .then((res) => {
+        if (!isActive) return;
+        if (res.extractedText && res.extractedText.trim().length > 0) {
+          setTextState({ status: 'ready', text: res.extractedText });
+        } else {
+          setTextState({ status: 'none' });
+        }
+      })
+      .catch((err) => {
+        if (!isActive) return;
+        const msg = err instanceof Error ? err.message : '';
+        if (msg === 'Extracted text not found') {
+          setTextState({ status: 'none' });
+        } else {
+          setTextState({ status: 'error' });
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [docId, docStatus]);
 
   const handleDownload = async () => {
+    if (!readyDocument) return;
     setDownloadError(null);
     setIsDownloading(true);
     try {
-      await downloadDocument(document.id);
+      await downloadDocument(readyDocument.id);
     } catch (error) {
       setDownloadError({
-        documentId: document.id,
-        message: error instanceof Error ? error.message : 'Failed to download document',
+        documentId: readyDocument.id,
+        message:
+          error instanceof Error ? error.message : 'Failed to download document',
       });
     } finally {
       setIsDownloading(false);
     }
   };
 
+  if (state.status === 'loading') {
+    return (
+      <Drawer title="Loading document…" onClose={onClose}>
+        <div className="flex h-48 items-center justify-center">
+          <Spinner label="Loading document" />
+        </div>
+      </Drawer>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <Drawer title="Document unavailable" onClose={onClose}>
+        <InlineAlert tone="error">{state.message}</InlineAlert>
+      </Drawer>
+    );
+  }
+
+  const document = state.document;
+  const sortedDefs = sortFilterDefinitions(filterDefinitions);
+  const filterValueMap = new Map<string, string | null>();
+  if (document.filterValues) {
+    for (const fv of document.filterValues) {
+      filterValueMap.set(fv.filterDefinitionId, fv.value);
+    }
+  }
+
+  const dateUploaded = document.uploadedAt
+    ? formatDateTime(document.uploadedAt)
+    : document.uploadDate;
+
   return (
-    <aside className="w-[400px] border-l border-slate-200 bg-white flex flex-col shrink-0 z-10 shadow-xl shadow-slate-200/50">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-900">Document Details</h2>
-        <button
-          onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          <span className="material-symbols-outlined">close</span>
-        </button>
-      </div>
+    <Drawer
+      title={<span title={document.fileName}>{document.fileName}</span>}
+      headerAside={
+        <StatusBadge
+          status={document.status}
+          errorMessage={document.errorMessage}
+        />
+      }
+      onClose={onClose}
+      footer={
+        <>
+          <Button
+            variant="danger"
+            icon="delete"
+            className="mr-auto"
+            onClick={() => onDelete(document.id)}
+          >
+            Delete
+          </Button>
+          <Button
+            variant="primary"
+            icon="download"
+            loading={isDownloading}
+            onClick={handleDownload}
+          >
+            Download
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {downloadError && downloadError.documentId === document.id && (
+          <InlineAlert tone="error">{downloadError.message}</InlineAlert>
+        )}
 
-      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-        <div className="w-full aspect-[4/3] bg-slate-100 rounded-lg mb-6 flex items-center justify-center border border-slate-200 overflow-hidden relative group">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
-            <button className="bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-medium shadow-lg hover:bg-slate-50">
-              Open Preview
-            </button>
-          </div>
-          <span className="material-symbols-outlined text-6xl text-slate-300">
-            {isImage ? 'image' : 'picture_as_pdf'}
-          </span>
-          <div className="absolute top-3 right-3 bg-white rounded p-1 shadow-sm">
-            <span className="material-symbols-outlined text-slate-400 text-sm">open_in_full</span>
-          </div>
-        </div>
+        <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5 text-body">
+          <dt className="text-label uppercase text-ink-muted">Date uploaded</dt>
+          <dd className="text-ink tabular-nums">{dateUploaded}</dd>
 
-        <div className="space-y-6">
-          <div>
-            <div className="flex items-start justify-between gap-4 mb-2">
-              <div className="flex flex-col gap-2">
-                <h3 className="text-lg font-bold text-slate-900 break-all leading-tight">
-                  {document.fileName}
-                </h3>
-                <StatusBadge status={document.status} errorMessage={document.errorMessage} />
-              </div>
-              <button className="text-slate-400 hover:text-primary shrink-0 pt-1">
-                <span className="material-symbols-outlined text-[18px]">edit</span>
-              </button>
-            </div>
-            <div className="flex flex-col gap-1 text-sm text-slate-500">
-              <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px]">schedule</span>
-                {document.uploadDate}
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px]">hard_drive</span>
-                {document.fileSize} • {isImage ? 'Image' : 'PDF Document'}
-              </span>
-            </div>
-          </div>
+          <dt className="text-label uppercase text-ink-muted">Size</dt>
+          <dd className="text-ink tabular-nums">{document.fileSize}</dd>
 
-          {downloadError?.documentId === document.id && (
-            <InlineAlert tone="error" onDismiss={() => setDownloadError(null)}>
-              {downloadError.message}
-            </InlineAlert>
+          {typeof document.pageCount === 'number' && (
+            <>
+              <dt className="text-label uppercase text-ink-muted">Pages</dt>
+              <dd className="text-ink tabular-nums">{document.pageCount}</dd>
+            </>
           )}
 
-          <div className="flex gap-3">
-            <button 
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="flex-1 bg-primary text-white py-2 px-4 rounded-lg font-medium text-sm hover:bg-blue-600 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {isDownloading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Downloading...
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-[18px]">download</span>
-                  Download
-                </>
-              )}
-            </button>
-            <button className="flex-1 bg-white border border-slate-200 text-slate-700 py-2 px-4 rounded-lg font-medium text-sm hover:bg-slate-50 transition-colors shadow-sm flex items-center justify-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">share</span>
-              Share
-            </button>
-          </div>
+          {sortedDefs.map((def) => {
+            const rawVal = filterValueMap.get(def.id);
+            const displayVal =
+              rawVal !== undefined && rawVal !== null && rawVal.trim().length > 0
+                ? def.type === 'DATE'
+                  ? formatIsoDate(rawVal)
+                  : rawVal
+                : '—';
 
-          {document.extractedText && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Extracted Text
-                </label>
-                <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
-                  OCR Completed
-                </span>
+            return (
+              <div key={def.id} className="contents">
+                <dt className="text-label uppercase text-ink-muted">
+                  {def.name}
+                </dt>
+                <dd className="text-ink tabular-nums">{displayVal}</dd>
               </div>
-              <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
-                <p className="text-xs text-slate-600 font-mono leading-relaxed h-32 overflow-y-auto custom-scrollbar select-text whitespace-pre-wrap">
-                  {document.extractedText}
-                </p>
+            );
+          })}
+        </dl>
+
+        <div>
+          <h3 className="mt-4 mb-1.5 text-label uppercase text-ink-muted">
+            Extracted text
+          </h3>
+          {document.status === 'PROCESSED' ? (
+            textState.status === 'loading' ? (
+              <div className="flex items-center gap-2 text-small text-ink-muted">
+                <Spinner size="sm" />
+                <span>Loading text…</span>
               </div>
-            </div>
+            ) : textState.status === 'ready' ? (
+              <p className="whitespace-pre-wrap break-words rounded border border-line bg-subtle p-2 text-small text-ink-body">
+                {textState.text.length > 600
+                  ? `${textState.text.slice(0, 600)}…`
+                  : textState.text}
+              </p>
+            ) : textState.status === 'none' ? (
+              <p className="text-small text-ink-muted">
+                No text was extracted from this document.
+              </p>
+            ) : (
+              <p className="text-small text-ink-muted">
+                Couldn't load the extracted text.
+              </p>
+            )
+          ) : document.status === 'FAILED' ? (
+            <p className="text-small text-ink-muted">
+              Processing failed, so there's no extracted text.
+            </p>
+          ) : (
+            <p className="text-small text-ink-muted">
+              Text appears here once processing finishes.
+            </p>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Properties</label>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-50 p-2 rounded-lg">
-                <p className="text-[10px] text-slate-400 uppercase">Author</p>
-                <p className="text-xs font-medium text-slate-700">
-                  {document.uploadedBy || 'System Upload'}
-                </p>
-              </div>
-              <div className="bg-slate-50 p-2 rounded-lg">
-                <p className="text-[10px] text-slate-400 uppercase">Page Count</p>
-                <p className="text-xs font-medium text-slate-700">
-                  {document.pageCount ? `${document.pageCount} Pages` : 'N/A'}
-                </p>
-              </div>
-              <div className="bg-slate-50 p-2 rounded-lg">
-                <p className="text-[10px] text-slate-400 uppercase">Dimensions</p>
-                <p className="text-xs font-medium text-slate-700">A4 (Portrait)</p>
-              </div>
-              <div className="bg-slate-50 p-2 rounded-lg">
-                <p className="text-[10px] text-slate-400 uppercase">Version</p>
-                <p className="text-xs font-medium text-slate-700">v1.0 (Original)</p>
-              </div>
-            </div>
-          </div>
+          <TextAction
+            tone="accent"
+            className="mt-2"
+            onClick={() => onOpenPreview(document)}
+          >
+            Show full preview
+          </TextAction>
         </div>
       </div>
-
-      <div className="p-4 border-t border-slate-100 bg-slate-50">
-        <button 
-          onClick={() => onDelete(document.id)}
-          className="w-full text-red-500 hover:bg-red-50 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          Delete Document
-        </button>
-      </div>
-    </aside>
+    </Drawer>
   );
 }
+

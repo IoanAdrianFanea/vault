@@ -11,6 +11,7 @@ Potential additions and improvements for future consideration.
 - ~~Compression threshold (suggested 5MB)~~ — **decided and implemented**: 5MB threshold (`COMPRESSION_THRESHOLD_BYTES`) and 10% minimum savings ratio (`COMPRESSION_MIN_SAVINGS_RATIO`), both configurable via environment
 - ~~Password policy specifics~~ — **decided and implemented**: min 10 chars, one uppercase, one lowercase, one digit, one special character
 - Upload size limit: Phase 2 calls for removing the 50MB cap entirely — confirm there should be no ceiling at all before removing it
+- Storage usage indicator in the sidebar — only if the stakeholder asks for it
 
 ---
 
@@ -109,3 +110,57 @@ Permanent deletion (after 30-day window or via admin override) cascades:
 - All deletion logs retained
 - ProjectMembership rows removed
 - DocumentFilterValue rows removed
+
+---
+
+## Retry Processing Endpoint
+
+An endpoint to re-run text extraction for a FAILED document. The Documents table's "Retry" action is wired to a `TODO(backend)` handler.
+
+---
+
+## Register PDF Export
+
+An endpoint that renders the filtered document register as a PDF. "Generate register PDF" in the Documents export menu is a `TODO(backend)` handler.
+
+---
+
+## Custom Filter Values as Table Columns
+
+Show custom filter values as optional columns in the Documents table.
+
+---
+
+## Document List Pagination
+
+`GET /documents` is capped at 50 rows. The page says "Showing the first 50 documents — narrow with filters". Add pagination or infinite scroll.
+
+---
+
+## Password Reset Flow
+
+There's no "forgot password" flow. The link was removed from the sign-in page because it did nothing.
+
+---
+
+## User Deletion Cascades to Uploaded Documents
+
+`Document.uploadedBy` uses `onDelete: Cascade`, so deleting a user permanently deletes every document they uploaded, with no recycle bin and no deletion log. The UI warns about it. Likely fix: make `uploadedById` nullable with `onDelete: SetNull`, or deactivate users instead of deleting them.
+
+---
+
+## Project and Uploader on GET /documents/:id
+
+The endpoint returns neither `projectName` nor `uploadedByEmail`, so the Search drawer can't show them (they're only on list rows).
+
+---
+
+## Escape Search Snippets Server-Side
+
+`searchDocuments` wraps unescaped file names and text in `<mark>` tags. The client now renders them safely, but the API should HTML-escape the text around the tags.
+
+---
+
+## Protect Admin Accounts From Deletion
+
+`DELETE /users/:id` lets an admin delete their own account or the last admin. Reject both.

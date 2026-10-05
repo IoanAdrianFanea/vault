@@ -17,12 +17,16 @@ import AdminArchive from './pages/admin/AdminArchive';
 import AdminFilters from './pages/admin/AdminFilters';
 import AdminRecycleBin from './pages/admin/AdminRecycleBin';
 
+import { AdminLayout } from './components/admin/AdminLayout';
+
 interface AdminGuardProps {
   children: ReactNode;
 }
 
 function AdminGuard({ children }: AdminGuardProps) {
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(() =>
+    Boolean(sessionStorage.getItem('accessToken')),
+  );
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -30,8 +34,6 @@ function AdminGuard({ children }: AdminGuardProps) {
     const accessToken = sessionStorage.getItem('accessToken');
 
     if (!accessToken) {
-      setIsAdmin(false);
-      setIsChecking(false);
       return () => {
         isActive = false;
       };
@@ -67,12 +69,6 @@ function AdminGuard({ children }: AdminGuardProps) {
 
   return <>{children}</>;
 }
-
-const renderAdminPage = (page: ReactNode) => (
-  <AdminGuard>
-    <AppShell>{page}</AppShell>
-  </AdminGuard>
-);
 
 function App() {
   return (
@@ -142,16 +138,20 @@ function App() {
           path="/admin"
           element={
             <AdminGuard>
-              <Navigate to="/admin/projects" replace />
+              <AppShell>
+                <AdminLayout />
+              </AppShell>
             </AdminGuard>
           }
-        />
-        <Route path="/admin/projects" element={renderAdminPage(<AdminProjects />)} />
-        <Route path="/admin/users" element={renderAdminPage(<AdminUsers />)} />
-        <Route path="/admin/pending" element={renderAdminPage(<AdminPending />)} />
-        <Route path="/admin/recycle-bin" element={renderAdminPage(<AdminRecycleBin />)} />
-        <Route path="/admin/archive" element={renderAdminPage(<AdminArchive />)} />
-        <Route path="/admin/filters" element={renderAdminPage(<AdminFilters />)} />
+        >
+          <Route index element={<Navigate to="/admin/projects" replace />} />
+          <Route path="projects" element={<AdminProjects />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="pending" element={<AdminPending />} />
+          <Route path="recycle-bin" element={<AdminRecycleBin />} />
+          <Route path="archive" element={<AdminArchive />} />
+          <Route path="filters" element={<AdminFilters />} />
+        </Route>
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

@@ -89,7 +89,8 @@ export async function deleteProject(id: string): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error('Failed to delete project');
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.message ?? 'Failed to delete project');
   }
 }
 

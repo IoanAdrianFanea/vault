@@ -1,107 +1,135 @@
-import type { Job } from '../../types';
+import type { Job, JobType } from '../../types';
+import {
+  Badge,
+  DataTable,
+  TableCell,
+  TableHeaderCell,
+  TableRow,
+  TextAction,
+} from '../ui';
+import { formatCountLabel, formatDateTime } from '../../utils/format';
+import { JOB_STATUS_BADGES } from './jobStatusBadges';
 
-interface JobsTableProps {
-  jobs: Job[];
-  onSelectJob: (id: string) => void;
+function getTypeIcon(type: JobType): string {
+  switch (type) {
+    case 'EXPORT':
+      return 'picture_as_pdf';
+    case 'INDEX':
+      return 'content_copy';
+    case 'EXTRACT':
+      return 'summarize';
+  }
 }
 
-export function JobsTable({ jobs, onSelectJob }: JobsTableProps) {
-  const getStatusBadge = (status: Job['status']) => {
-    const variants = {
-      COMPLETED: {
-        bg: 'bg-green-50 text-green-700 border-green-100',
-        dot: 'bg-green-500',
-        text: 'Completed',
-      },
-      PROCESSING: {
-        bg: 'bg-blue-50 text-blue-700 border-blue-100',
-        dot: 'bg-blue-500 animate-pulse',
-        text: 'Processing',
-      },
-      FAILED: {
-        bg: 'bg-red-50 text-red-700 border-red-100',
-        dot: 'bg-red-500',
-        text: 'Failed',
-      },
-      PENDING: {
-        bg: 'bg-slate-50 text-slate-700 border-slate-100',
-        dot: 'bg-slate-500',
-        text: 'Pending',
-      },
-    };
+export interface JobsTableProps {
+  jobs: Job[];
+  selectedJobId?: string;
+  onSelectJob: (id: string) => void;
+  onRetryJob: (id: string) => void;
+}
 
-    const variant = variants[status];
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${variant.bg} border`}>
-        <span className={`size-1.5 rounded-full ${variant.dot}`}></span>
-        {variant.text}
-      </span>
-    );
-  };
-
-  const getTypeIcon = (type: Job['type']) => {
-    const icons = {
-      EXPORT: { icon: 'picture_as_pdf', color: 'bg-blue-50 text-blue-600' },
-      INDEX: { icon: 'content_copy', color: 'bg-indigo-50 text-indigo-600' },
-      EXTRACT: { icon: 'summarize', color: 'bg-orange-50 text-orange-600' },
-    };
-    return icons[type];
-  };
-
+export function JobsTable({
+  jobs,
+  selectedJobId,
+  onSelectJob,
+  onRetryJob,
+}: JobsTableProps) {
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr className="border-b border-border-subtle">
-            <th className="py-3 px-4 text-xs font-medium text-text-muted uppercase tracking-wider w-1/3">Job Type</th>
-            <th className="py-3 px-4 text-xs font-medium text-text-muted uppercase tracking-wider w-1/6">Status</th>
-            <th className="py-3 px-4 text-xs font-medium text-text-muted uppercase tracking-wider w-1/4">Created Time</th>
-            <th className="py-3 px-4 text-xs font-medium text-text-muted uppercase tracking-wider text-right w-1/6">
-              Action
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border-subtle">
-          {jobs.map((job) => {
-            const typeConfig = getTypeIcon(job.type);
-            return (
-              <tr
-                key={job.id}
-                onClick={() => onSelectJob(job.id)}
-                className="group hover:bg-background-subtle transition-colors cursor-pointer"
-              >
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 ${typeConfig.color} rounded-md`}>
-                      <span className="material-symbols-outlined text-[20px]">{typeConfig.icon}</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-text-main">{job.title}</p>
-                      <p className="text-xs text-text-muted">
-                        #{job.id} • {job.fileSize || `${job.fileCount} Files`}
-                      </p>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3 px-4">{getStatusBadge(job.status)}</td>
-                <td className="py-3 px-4">
-                  <p className="text-sm text-text-main">{job.createdAt}</p>
-                  <p className="text-xs text-text-muted">by {job.createdBy}</p>
-                </td>
-                <td className="py-3 px-4 text-right">
-                  <button
-                    className={`text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity ${
-                      job.status === 'FAILED' ? 'text-red-600 hover:text-red-700' : 'text-text-muted hover:text-accent'
-                    }`}
+    <DataTable label="Jobs" fixed>
+      <thead>
+        <TableRow>
+          <TableHeaderCell>Job</TableHeaderCell>
+          <TableHeaderCell className="w-[120px]">Status</TableHeaderCell>
+          <TableHeaderCell className="w-[170px]">Created</TableHeaderCell>
+          <TableHeaderCell align="end" className="w-[120px]">
+            Actions
+          </TableHeaderCell>
+        </TableRow>
+      </thead>
+      <tbody>
+        {jobs.map((job) => {
+          const isSelected = job.id === selectedJobId;
+          const statusInfo = JOB_STATUS_BADGES[job.status];
+          const isFailed = job.status === 'FAILED';
+
+          return (
+            <TableRow
+              key={job.id}
+              selected={isSelected}
+              onClick={() => onSelectJob(job.id)}
+            >
+              <TableCell>
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="material-symbols-outlined text-[16px] text-ink-muted"
+                    aria-hidden="true"
                   >
-                    {job.status === 'FAILED' ? 'Retry' : 'View Details'}
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                    {getTypeIcon(job.type)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className="block truncate font-medium text-ink"
+                      title={job.title}
+                    >
+                      {job.title}
+                    </span>
+                    <span className="block text-small text-ink-muted tabular-nums">
+                      {`#${job.id} · ${
+                        job.fileSize ??
+                        formatCountLabel(job.fileCount ?? 0, 'file', 'files')
+                      }`}
+                    </span>
+                  </div>
+                </div>
+              </TableCell>
+
+              <TableCell>
+                <Badge tone={statusInfo.tone} dot>
+                  {statusInfo.label}
+                </Badge>
+              </TableCell>
+
+              <TableCell>
+                <span className="whitespace-nowrap text-small text-ink tabular-nums">
+                  {formatDateTime(job.createdAt)}
+                </span>
+                <span className="block text-small text-ink-muted">
+                  by {job.createdBy}
+                </span>
+              </TableCell>
+
+              <TableCell align="end" onClick={(e) => e.stopPropagation()}>
+                <div className="inline-flex items-center gap-1.5">
+                  {isFailed && (
+                    <>
+                      <TextAction
+                        tone="danger"
+                        aria-label={`Retry ${job.title}`}
+                        onClick={() => onRetryJob(job.id)}
+                      >
+                        Retry
+                      </TextAction>
+                      <span
+                        className="text-small text-line-strong"
+                        aria-hidden="true"
+                      >
+                        /
+                      </span>
+                    </>
+                  )}
+                  <TextAction
+                    tone="accent"
+                    aria-label={`View ${job.title}`}
+                    onClick={() => onSelectJob(job.id)}
+                  >
+                    View
+                  </TextAction>
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </tbody>
+    </DataTable>
   );
 }

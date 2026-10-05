@@ -253,7 +253,8 @@ Status: **not started**
 ## Known Technical Notes
 
 - Storage key format is `active/{projectId}/{documentId}.{ext}[.gz]`, and `deleted/{projectId}/{documentId}.{ext}[.gz]` while a document sits in the recycle bin.
-- The `/jobs` route exists in the frontend as a mock-data preview of Phase 6 functionality. Its banner incorrectly says "Phase 3 – Async Processing"; async processing is Phase 6.
+- The `/jobs` route is a mock-data preview of Phase 6 functionality. Its banner says so, and its Download, Delete and Retry actions are `TODO(backend)` stubs.
+- Frontend `TODO(backend)` hooks: "Retry" on FAILED documents in the Documents table (needs a retry-processing endpoint) and "Generate register PDF" in the Documents export menu (needs a register PDF endpoint). Both controls are visible and do nothing yet.
 - `/admin/archive` and `/admin/filters` are both real, fully wired pages (Phases 3 and 4).
 - `User` has `language`, `timezone` fields that are unused. Candidates for removal — see backlog.
 - Search loads every accessible document with extracted text into memory and filters in JavaScript (`searchDocuments`). Fine at current scale, but it will need a SQL/FTS rewrite before real data volumes.

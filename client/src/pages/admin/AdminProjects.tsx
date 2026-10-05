@@ -1,32 +1,63 @@
-import { useEffect, useState } from 'react';
-import { AdminTabs } from '../../components/admin/AdminTabs';
+import { useCallback, useEffect, useState } from 'react';
 import { getProjects, type AdminProject } from '../../api/projects';
 import { RenameProjectModal } from '../../components/admin/RenameProjectModal';
 import { DeleteProjectModal } from '../../components/admin/DeleteProjectModal';
 import { ArchiveProjectModal } from '../../components/admin/ArchiveProjectModal';
 import { ManageMembersModal } from '../../components/admin/ManageMembersModal';
 import { CreateProjectModal } from '../../components/admin/CreateProjectModal';
+import { AdminSection } from '../../components/admin/AdminSection';
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  IconButton,
+  InlineAlert,
+  Input,
+  TableCell,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/ui';
+import { formatCount, formatDate } from '../../utils/format';
 
 export default function AdminProjects() {
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
   const [renamingProject, setRenamingProject] = useState<AdminProject | null>(null);
   const [deletingProject, setDeletingProject] = useState<AdminProject | null>(null);
   const [archivingProject, setArchivingProject] = useState<AdminProject | null>(null);
   const [managingProject, setManagingProject] = useState<AdminProject | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  useEffect(() => {
+  const fetchProjects = useCallback(() => {
     getProjects()
-      .then(setProjects)
+      .then((data) => {
+        setProjects(data);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        setLoadError(
+          err instanceof Error ? err.message : 'Failed to load projects',
+        );
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  const handleRetryLoad = () => {
+    setIsLoading(true);
+    fetchProjects();
+  };
 
   const handleRenamed = (id: string, newName: string) => {
-    setProjects((prev) => prev.map((p) => p.id === id ? { ...p, name: newName } : p));
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, name: newName } : p)),
+    );
   };
 
   const handleDeleted = (id: string) => {
@@ -51,8 +82,34 @@ export default function AdminProjects() {
     setProjects((prev) => [...prev, project]);
   };
 
+  const visibleProjects = projects.filter((p) =>
+    p.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
   return (
-    <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900 overflow-hidden">
+    <AdminSection
+      toolbarStart={
+        <Input
+          size="sm"
+          leadingIcon="search"
+          placeholder="Search projects"
+          aria-label="Search projects"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-64"
+        />
+      }
+      toolbarEnd={
+        <Button
+          variant="primary"
+          size="sm"
+          icon="add"
+          onClick={() => setShowCreateModal(true)}
+        >
+          New project
+        </Button>
+      }
+    >
       <RenameProjectModal
         isOpen={renamingProject !== null}
         projectId={renamingProject?.id ?? ''}
@@ -64,7 +121,6 @@ export default function AdminProjects() {
         isOpen={deletingProject !== null}
         projectId={deletingProject?.id ?? ''}
         projectName={deletingProject?.name ?? ''}
-        memberCount={deletingProject?._count.memberships ?? 0}
         onClose={() => setDeletingProject(null)}
         onDeleted={handleDeleted}
       />
@@ -87,76 +143,125 @@ export default function AdminProjects() {
         onClose={() => setArchivingProject(null)}
         onArchived={handleArchived}
       />
-      <div className="bg-surface pt-6 px-10 shrink-0 sticky top-0 z-10">
-        <AdminTabs />
-      </div>
 
-      <div className="flex-1 overflow-y-auto p-10 max-w-7xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-headline-sm font-headline font-bold text-on-surface">Projects</h1>
-          <button onClick={() => setShowCreateModal(true)} className="bg-primary text-on-primary px-4 py-2 rounded-lg flex items-center gap-2 text-label-md font-semibold hover:opacity-90 transition-opacity">
-            <span className="material-symbols-outlined text-sm">add</span>
-            New Project
-          </button>
+      {loadError && (
+        <div className="flex flex-col items-start gap-2">
+          <InlineAlert tone="error">
+            <p className="font-medium">Couldn't load projects.</p>
+            <p>{loadError}</p>
+          </InlineAlert>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="refresh"
+            onClick={handleRetryLoad}
+          >
+            Try again
+          </Button>
         </div>
+      )}
 
-        <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden shadow-sm">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-outline-variant/10 bg-surface-container-low/50 text-label-md font-label uppercase tracking-wider text-outline">
-                <th className="px-6 py-4 font-medium w-1/3">Project Name</th>
-                <th className="px-6 py-4 font-medium w-1/6">Members</th>
-                <th className="px-6 py-4 font-medium w-1/4">Created Date</th>
-                <th className="px-6 py-4 font-medium w-1/4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="text-body-md text-on-surface divide-y divide-outline-variant/5">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-5 text-center text-on-surface-variant">Loading...</td>
-                </tr>
-              ) : projects.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-5 text-center text-on-surface-variant">No projects yet</td>
-                </tr>
-              ) : projects.map((project) => (
-              <tr key={project.id} className="hover:bg-surface-container-low/30 transition-colors group">
-                <td className="px-6 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-primary-container text-primary flex items-center justify-center">
-                      <span className="material-symbols-outlined text-sm">view_kanban</span>
-                    </div>
-                    <span className="font-semibold text-on-surface group-hover:text-primary transition-colors">
+      {isLoading && projects.length === 0 ? null : !loadError && projects.length === 0 ? (
+        <EmptyState
+          className="rounded border border-line"
+          icon="folder"
+          title="No projects yet"
+          description="Create a project, then add members so they can upload documents."
+          action={
+            <Button
+              variant="primary"
+              size="sm"
+              icon="add"
+              onClick={() => setShowCreateModal(true)}
+            >
+              New project
+            </Button>
+          }
+        />
+      ) : !loadError && visibleProjects.length === 0 ? (
+        <EmptyState
+          className="rounded border border-line"
+          icon="search_off"
+          title={`No projects match "${search.trim()}"`}
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setSearch('')}
+            >
+              Clear search
+            </Button>
+          }
+        />
+      ) : (
+        <DataTable label="Projects" fixed busy={isLoading && projects.length > 0}>
+          <thead>
+            <TableRow>
+              <TableHeaderCell>Project name</TableHeaderCell>
+              <TableHeaderCell align="end" className="w-[100px]">
+                Members
+              </TableHeaderCell>
+              <TableHeaderCell className="w-[130px]">Created</TableHeaderCell>
+              <TableHeaderCell align="end" className="w-[152px]">
+                Actions
+              </TableHeaderCell>
+            </TableRow>
+          </thead>
+          <tbody>
+            {visibleProjects.map((project) => (
+                <TableRow key={project.id}>
+                  <TableCell>
+                    <span
+                      className="block truncate font-medium text-ink"
+                      title={project.name}
+                    >
                       {project.name}
                     </span>
-                  </div>
-                </td>
-                <td className="px-6 py-5">
-                  <span className="text-on-surface-variant">{project._count.memberships}</span>
-                </td>
-                <td className="px-6 py-5 text-on-surface-variant">{formatDate(project.createdAt)}</td>
-                <td className="px-6 py-5 text-right">
-                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => setManagingProject(project)} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors" title="Manage Members">
-                      <span className="material-symbols-outlined text-[18px]">group_add</span>
-                    </button>
-                    <button onClick={() => setRenamingProject(project)} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors" title="Rename">
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                    <button onClick={() => setArchivingProject(project)} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container/50 rounded transition-colors" title="Archive">
-                      <span className="material-symbols-outlined text-[18px]">inventory_2</span>
-                    </button>
-                    <button onClick={() => setDeletingProject(project)} className="p-1.5 text-outline hover:text-error hover:bg-error-container/20 rounded transition-colors" title="Delete">
-                      <span className="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </main>
+                  </TableCell>
+                  <TableCell align="end">
+                    <span className="text-small text-ink-muted tabular-nums">
+                      {formatCount(project._count.memberships)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="whitespace-nowrap text-small text-ink-muted tabular-nums">
+                      {formatDate(project.createdAt)}
+                    </span>
+                  </TableCell>
+                  <TableCell align="end">
+                    <div className="inline-flex items-center gap-0.5">
+                      <IconButton
+                        size="sm"
+                        icon="group"
+                        label={`Manage members of ${project.name}`}
+                        onClick={() => setManagingProject(project)}
+                      />
+                      <IconButton
+                        size="sm"
+                        icon="edit"
+                        label={`Rename ${project.name}`}
+                        onClick={() => setRenamingProject(project)}
+                      />
+                      <IconButton
+                        size="sm"
+                        icon="inventory_2"
+                        label={`Archive ${project.name}`}
+                        onClick={() => setArchivingProject(project)}
+                      />
+                      <IconButton
+                        size="sm"
+                        icon="delete"
+                        label={`Delete ${project.name}`}
+                        onClick={() => setDeletingProject(project)}
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+            ))}
+          </tbody>
+        </DataTable>
+      )}
+    </AdminSection>
   );
 }
+

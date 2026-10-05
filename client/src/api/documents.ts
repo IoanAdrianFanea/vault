@@ -121,7 +121,7 @@ export const documentsService = {
         throw new Error(error.message || 'Invalid file');
       }
       if (response.status === 413) {
-        throw new Error('File too large. Maximum size is 50MB');
+        throw new Error('The file is too large to upload.');
       }
       const error = await response.json().catch(() => ({ message: 'Upload failed' }));
       throw new Error(error.message || 'Upload failed');
