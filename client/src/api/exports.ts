@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export interface DocumentBlobPayload {
   blob: Blob;
@@ -14,7 +14,7 @@ export async function getDocumentBlob(documentId: string): Promise<DocumentBlobP
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${API_BASE}/documents/${documentId}/download`, {
+  const response = await fetch(`${API_URL}/documents/${documentId}/download`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -65,7 +65,7 @@ export async function exportDocuments(documentIds: string[]): Promise<void> {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/exports`, {
+    const response = await fetch(`${API_URL}/exports`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

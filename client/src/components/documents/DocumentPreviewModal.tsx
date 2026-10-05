@@ -1,33 +1,71 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { Document, DocumentFilterValue } from '../../types';
+import type { FilterDefinition } from '../../api/filters';
 import { downloadDocument, getDocumentBlob } from '../../api/exports';
 import { documentsService } from '../../api/documents';
+import {
+  Button,
+  EmptyState,
+  InlineAlert,
+  Modal,
+  Spinner,
+  StatusBadge,
+} from '../ui';
+import { formatIsoDate } from '../../utils/format';
+import { sortFilterDefinitions } from './documentFilters';
 
-interface DocumentPreviewModalProps {
+export interface DocumentPreviewModalProps {
   document: Document;
+  filterDefinitions: FilterDefinition[];
   onClose: () => void;
 }
 
-export function DocumentPreviewModal({ document, onClose }: DocumentPreviewModalProps) {
+type TextState =
+  | { status: 'loading' }
+  | { status: 'ready'; text: string }
+  | { status: 'none' }
+  | { status: 'error' };
+
+export function DocumentPreviewModal({
+  document,
+  filterDefinitions,
+  onClose,
+}: DocumentPreviewModalProps) {
+  const textHeadingId = useId();
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string>('');
+
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
-  const [filterValues, setFilterValues] = useState<DocumentFilterValue[]>(document.filterValues ?? []);
+
+  const [details, setDetails] = useState<{
+    pageCount: number | null;
+    filterValues: DocumentFilterValue[];
+  }>({
+    pageCount: document.pageCount ?? null,
+    filterValues: document.filterValues ?? [],
+  });
+
+  const [textState, setTextState] = useState<TextState>({ status: 'loading' });
+
   const isImage = document.mimeType.startsWith('image/');
 
-  // The document list doesn't include custom filter values (kept lean); fetch the
-  // full document record here so the preview can show what was entered on upload.
+  // Fetch full details (pages, custom fields)
   useEffect(() => {
     let isMounted = true;
 
     documentsService
       .getDocument(document.id)
       .then((full) => {
-        if (isMounted) setFilterValues(full.filterValues ?? []);
+        if (!isMounted) return;
+        setDetails({
+          pageCount: full.pageCount ?? null,
+          filterValues: full.filterValues ?? [],
+        });
       })
       .catch(() => {
-        // Non-critical — the preview still works without custom field values.
+        // Non-critical — detail values are optional
       });
 
     return () => {
@@ -35,6 +73,7 @@ export function DocumentPreviewModal({ document, onClose }: DocumentPreviewModal
     };
   }, [document.id]);
 
+  // Fetch blob preview
   useEffect(() => {
     let isMounted = true;
     let currentObjectUrl: string | null = null;
@@ -55,9 +94,7 @@ export function DocumentPreviewModal({ document, onClose }: DocumentPreviewModal
 
         setPreviewUrl(currentObjectUrl);
       } catch (error) {
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
         setPreviewError(error instanceof Error ? error.message : 'Failed to load preview');
       } finally {
         if (isMounted) {
@@ -76,151 +113,202 @@ export function DocumentPreviewModal({ document, onClose }: DocumentPreviewModal
     };
   }, [document.id]);
 
+  // Fetch extracted text
+  useEffect(() => {
+    let isMounted = true;
+
+    if (document.status !== 'PROCESSED') {
+      setTextState({ status: 'none' });
+      return;
+    }
+
+    setTextState({ status: 'loading' });
+
+    documentsService
+      .getDocumentText(document.id)
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.extractedText && res.extractedText.trim().length > 0) {
+          setTextState({ status: 'ready', text: res.extractedText });
+        } else {
+          setTextState({ status: 'none' });
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : '';
+        if (msg === 'Extracted text not found') {
+          setTextState({ status: 'none' });
+        } else {
+          setTextState({ status: 'error' });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [document.id, document.status]);
+
   const handleDownload = async () => {
     setIsDownloading(true);
+    setDownloadError('');
     try {
       await downloadDocument(document.id);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to download document');
+      setDownloadError(
+        error instanceof Error ? error.message : 'Failed to download document',
+      );
     } finally {
       setIsDownloading(false);
     }
   };
 
+  const sortedDefs = sortFilterDefinitions(filterDefinitions);
+  const filterValueMap = new Map<string, string | null>();
+  for (const fv of details.filterValues) {
+    filterValueMap.set(fv.filterDefinitionId, fv.value);
+  }
+
   return (
-    <>
-      <div className="fixed inset-0 bg-slate-900/40 z-40" onClick={onClose} />
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={<span title={document.fileName}>{document.fileName}</span>}
+      description={document.fileSize}
+      headerAside={
+        <StatusBadge status={document.status} errorMessage={document.errorMessage} />
+      }
+      size="xl"
+      bodyClassName="p-4"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            variant="primary"
+            icon="download"
+            loading={isDownloading}
+            onClick={handleDownload}
+          >
+            Download
+          </Button>
+        </>
+      }
+    >
+      {downloadError && (
+        <InlineAlert
+          tone="error"
+          onDismiss={() => setDownloadError('')}
+          className="mb-3"
+        >
+          {downloadError}
+        </InlineAlert>
+      )}
 
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose();
-          }
-        }}
-      >
-        <div className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className={`shrink-0 p-2 rounded-lg ${
-                  isImage
-                    ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-                    : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[20px] block">
-                  {isImage ? 'image' : 'picture_as_pdf'}
+      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-4">
+        {/* Left column: Preview */}
+        <div className="h-[60vh] min-h-[320px] overflow-hidden rounded border border-line bg-subtle">
+          {isPreviewLoading ? (
+            <div className="flex h-full items-center justify-center gap-2 text-body text-ink-muted">
+              <Spinner label="Loading preview" />
+              Loading preview…
+            </div>
+          ) : previewError ? (
+            <EmptyState
+              icon="visibility_off"
+              title="Couldn't load this preview"
+              description="Use Download to open the file."
+              className="h-full"
+            />
+          ) : previewUrl && isImage ? (
+            <img
+              src={previewUrl}
+              alt={`Preview of ${document.fileName}`}
+              className="h-full w-full bg-canvas object-contain"
+            />
+          ) : previewUrl && !isImage ? (
+            <iframe
+              src={previewUrl}
+              title={`Preview of ${document.fileName}`}
+              className="h-full w-full"
+            />
+          ) : null}
+        </div>
+
+        {/* Right column: Details and Extracted Text */}
+        <div className="flex min-h-0 flex-col gap-4">
+          {document.status === 'FAILED' && (
+            <InlineAlert tone="error">
+              Processing failed: {document.errorMessage ?? 'no reason was recorded.'}
+            </InlineAlert>
+          )}
+
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+            <dt className="text-label uppercase text-ink-muted">Project</dt>
+            <dd className="min-w-0 break-words text-body text-ink tabular-nums">
+              {document.projectName ?? '—'}
+            </dd>
+
+            <dt className="text-label uppercase text-ink-muted">Uploaded by</dt>
+            <dd className="min-w-0 break-words text-body text-ink tabular-nums">
+              {document.uploadedBy ?? '—'}
+            </dd>
+
+            <dt className="text-label uppercase text-ink-muted">Date uploaded</dt>
+            <dd className="min-w-0 break-words text-body text-ink tabular-nums">
+              {document.uploadDate}
+            </dd>
+
+            <dt className="text-label uppercase text-ink-muted">Pages</dt>
+            <dd className="min-w-0 break-words text-body text-ink tabular-nums">
+              {details.pageCount ?? '—'}
+            </dd>
+
+            {sortedDefs.map((def) => {
+              const rawVal = filterValueMap.get(def.id);
+              let displayVal = '—';
+              if (rawVal && rawVal.trim().length > 0) {
+                displayVal = def.type === 'DATE' ? formatIsoDate(rawVal) : rawVal;
+              }
+
+              return (
+                <div key={def.id} className="contents">
+                  <dt className="text-label uppercase text-ink-muted">{def.name}</dt>
+                  <dd className="min-w-0 break-words text-body text-ink tabular-nums">
+                    {displayVal}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+
+          <section aria-labelledby={textHeadingId} className="flex min-h-0 flex-col">
+            <h3 id={textHeadingId} className="mb-1 text-label uppercase text-ink-muted">
+              Extracted text
+            </h3>
+            <div
+              tabIndex={0}
+              aria-labelledby={textHeadingId}
+              className="max-h-56 overflow-y-auto custom-scrollbar whitespace-pre-wrap break-words rounded border border-line bg-subtle p-2 text-small text-ink-body"
+            >
+              {textState.status === 'loading' ? (
+                <div className="flex items-center gap-2 py-2 text-ink-muted">
+                  <Spinner label="Loading extracted text" />
+                </div>
+              ) : textState.status === 'ready' ? (
+                textState.text
+              ) : textState.status === 'error' ? (
+                <span className="text-status-red-text">
+                  Couldn't load the extracted text.
                 </span>
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold text-slate-900 dark:text-white truncate">{document.fileName}</h2>
-                <p className="text-sm text-slate-500">{document.fileSize}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-white"
-            >
-              <span className="material-symbols-outlined">close</span>
-            </button>
-          </div>
-
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
-                <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">Uploaded By</p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-100 mt-1">{document.uploadedBy || 'Unknown'}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
-                <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">Status</p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-100 mt-1">{document.status}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
-                <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">Date Uploaded</p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-100 mt-1">{document.uploadDate}</p>
-              </div>
-            </div>
-
-            {filterValues.length > 0 && (
-              <div className="mb-6">
-                <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-2">Custom Fields</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {filterValues.map((fv) => (
-                    <div
-                      key={fv.filterDefinitionId}
-                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-3"
-                    >
-                      <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">{fv.name}</p>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100 mt-1 break-words">
-                        {fv.value ?? '—'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/30 overflow-hidden h-[60vh] min-h-[460px]">
-              {isPreviewLoading && (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-3"></div>
-                    <p className="text-sm text-slate-500">Loading preview...</p>
-                  </div>
-                </div>
-              )}
-
-              {!isPreviewLoading && previewError && (
-                <div className="h-full flex items-center justify-center p-6">
-                  <div className="text-center">
-                    <span className="material-symbols-outlined text-4xl text-red-500 mb-2">error</span>
-                    <p className="text-sm font-medium text-red-600 dark:text-red-400">Could not load this preview</p>
-                    <p className="text-xs text-slate-500 mt-1">{previewError}</p>
-                    <p className="text-xs text-slate-500 mt-3">Use Download to open the file directly.</p>
-                  </div>
-                </div>
-              )}
-
-              {!isPreviewLoading && previewUrl && isImage && (
-                <img
-                  src={previewUrl}
-                  alt={`Preview of ${document.fileName}`}
-                  className="w-full h-full object-contain bg-white"
-                />
-              )}
-
-              {!isPreviewLoading && previewUrl && !isImage && (
-                <iframe
-                  src={previewUrl}
-                  title={`Preview of ${document.fileName}`}
-                  className="w-full h-full"
-                />
+              ) : (
+                <span className="text-ink-muted">No extracted text.</span>
               )}
             </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-blue-600 disabled:opacity-70 text-white text-sm font-medium"
-            >
-              <span className="material-symbols-outlined text-[16px]">download</span>
-              {isDownloading ? 'Downloading...' : 'Download'}
-            </button>
-          </div>
+          </section>
         </div>
       </div>
-    </>
+    </Modal>
   );
 }

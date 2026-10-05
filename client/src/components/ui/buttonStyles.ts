@@ -1,4 +1,4 @@
-export type ButtonVariant = 'primary' | 'dark' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'dark' | 'secondary' | 'ghost' | 'danger' | 'inverse';
 export type ButtonSize = 'sm' | 'md';
 
 const baseStyles =
@@ -10,6 +10,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   secondary: 'bg-canvas text-ink-body border border-line hover:bg-subtle hover:border-line-strong',
   ghost: 'text-ink-body hover:bg-subtle',
   danger: 'bg-canvas text-status-red-text border border-line hover:bg-status-red-bg hover:border-status-red-border',
+  inverse: 'text-white hover:bg-white/10',
 };
 
 const textButtonSizeStyles: Record<ButtonSize, string> = {

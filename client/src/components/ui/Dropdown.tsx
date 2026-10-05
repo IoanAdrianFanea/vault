@@ -59,6 +59,11 @@ export function Dropdown<T extends string>({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen || !activeOptionId) return;
+    document.getElementById(activeOptionId)?.scrollIntoView({ block: 'nearest' });
+  }, [isOpen, activeOptionId]);
+
+  useEffect(() => {
     if (!isOpen) return;
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -175,7 +180,7 @@ export function Dropdown<T extends string>({
             tabIndex={-1}
             aria-activedescendant={activeOptionId}
             onKeyDown={handleListKeyDown}
-            className="outline-none"
+            className="outline-none max-h-72 overflow-y-auto custom-scrollbar"
           >
             {options.map((option, index) => {
               const isSelected = option.value === value;

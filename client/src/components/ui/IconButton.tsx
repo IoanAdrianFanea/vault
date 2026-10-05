@@ -4,7 +4,7 @@ import { iconButtonClassName, type ButtonSize } from './buttonStyles';
 export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'> {
   icon: string;
   label: string;
-  variant?: 'ghost' | 'secondary';
+  variant?: 'ghost' | 'secondary' | 'inverse';
   size?: ButtonSize;
 }
 

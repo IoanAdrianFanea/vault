@@ -1,489 +1,548 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Document, DocumentStatus } from '../types';
-import { documentsService } from '../api/documents';
-import type { Document as ApiDocument, CustomFilterQueryValue } from '../api/documents';
+import {
+  documentsService,
+  type Document as ApiDocument,
+  type DocumentStatusCounts,
+} from '../api/documents';
 import { projectsService, type Project } from '../api/projects';
 import { filtersService, type FilterDefinition } from '../api/filters';
 import { downloadDocument } from '../api/exports';
-import { DocumentTable } from '../components/documents/DocumentTable';
-import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal';
+import { useIsAdmin } from '../components/layout/currentUser';
+import {
+  Button,
+  ButtonLink,
+  ConfirmDialog,
+  DOCUMENT_STATUS_ORDER,
+  EmptyState,
+  InlineAlert,
+  type MenuItem,
+} from '../components/ui';
+import {
+  formatCount,
+  formatCountLabel,
+  formatDateTime,
+  formatFileSize,
+} from '../utils/format';
+import { downloadCsv } from '../utils/csv';
+import {
+  buildDocumentsCsv,
+  documentsCsvFileName,
+} from '../components/documents/documentCsv';
+import {
+  ALL_PROJECTS,
+  DOCUMENT_LIST_LIMIT,
+  buildFilterChips,
+  countAppliedFilters,
+  createEmptyFilters,
+  getMatchingTotal,
+  hasActiveFilters,
+  readStoredProjectId,
+  sortFilterDefinitions,
+  toListQuery,
+  writeStoredProjectId,
+  type AppliedFilters,
+  type DocumentSortBy,
+} from '../components/documents/documentFilters';
 import { BulkActionBar } from '../components/documents/BulkActionBar';
+import { DocumentFilterChips } from '../components/documents/DocumentFilterChips';
+import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal';
+import { DocumentTable } from '../components/documents/DocumentTable';
+import { DocumentsSummaryBar } from '../components/documents/DocumentsSummaryBar';
+import { DocumentsToolbar } from '../components/documents/DocumentsToolbar';
 import { ExportModal } from '../components/documents/ExportModal';
 
-const statusLabelMap: Record<DocumentStatus, string> = {
-  UPLOADED: 'Uploaded',
-  QUEUED: 'Queued',
-  PROCESSING: 'Processing',
-  PROCESSED: 'Processed',
-  FAILED: 'Failed',
-};
-const statusValues = new Set<DocumentStatus>(['UPLOADED', 'QUEUED', 'PROCESSING', 'PROCESSED', 'FAILED']);
+interface ListSnapshot {
+  documents: Document[];
+  counts: DocumentStatusCounts | null;
+  updatedAt: Date;
+}
+
+interface PageAlert {
+  tone: 'error' | 'warning';
+  message: string;
+}
+
+const EMPTY_DOCUMENTS: Document[] = [];
 
 // Helper to convert API document to UI document
-const convertApiDocument = (apiDoc: ApiDocument): Document => {
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  return {
-    id: apiDoc.id,
-    fileName: apiDoc.originalFilename,
-    mimeType: apiDoc.mimeType,
-    fileSize: formatFileSize(apiDoc.sizeBytes),
-    status: apiDoc.status,
-    uploadDate: formatDate(apiDoc.uploadedAt),
-    uploadedBy: apiDoc.uploadedByEmail || 'Unknown',
-    errorMessage: apiDoc.errorMessage ?? undefined,
-    pageCount: apiDoc.pageCount || undefined,
-    extractedText: apiDoc.textPreview || undefined,
-    filterValues: apiDoc.filterValues,
-  };
-};
+const convertApiDocument = (apiDoc: ApiDocument): Document => ({
+  id: apiDoc.id,
+  fileName: apiDoc.originalFilename,
+  mimeType: apiDoc.mimeType,
+  fileSize: formatFileSize(apiDoc.sizeBytes),
+  status: apiDoc.status,
+  uploadDate: formatDateTime(apiDoc.uploadedAt),
+  uploadedBy: apiDoc.uploadedByEmail,
+  errorMessage: apiDoc.errorMessage ?? undefined,
+  pageCount: apiDoc.pageCount ?? undefined,
+  extractedText: apiDoc.textPreview ?? undefined,
+  filterValues: apiDoc.filterValues,
+  projectName: apiDoc.projectName,
+  sizeBytes: apiDoc.sizeBytes,
+  uploadedAt: apiDoc.uploadedAt,
+});
 
 export default function Documents() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string>('');
-  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showExportModal, setShowExportModal] = useState(false);
-
-  const allProjectsValue = 'all';
-  const allProjectsLabel = 'All Projects';
-  const projectStorageKey = 'documents:selectedProject';
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
-    const storedValue = sessionStorage.getItem(projectStorageKey);
-    if (!storedValue || storedValue === allProjectsLabel) {
-      return allProjectsValue;
-    }
-    return storedValue;
-  });
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [sortBy, setSortBy] = useState<'upload-newest' | 'upload-oldest' | 'name-asc' | 'name-desc' | 'status'>('upload-newest');
-  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
-  const [mainFilter, setMainFilter] = useState('');
-  const [filterDefs, setFilterDefs] = useState<FilterDefinition[]>([]);
-  const [customFilterValues, setCustomFilterValues] = useState<Record<string, CustomFilterQueryValue>>({});
-
-  // Update (or clear, once fully empty) one custom filter's raw value(s).
-  const setCustomFilterValue = (filterId: string, patch: Partial<CustomFilterQueryValue>) => {
-    setCustomFilterValues((prev) => {
-      const merged = { ...prev[filterId], ...patch };
-      const next = { ...prev };
-      if (merged.value || merged.from || merged.to) {
-        next[filterId] = merged;
-      } else {
-        delete next[filterId];
-      }
-      return next;
-    });
-  };
+  const isAdmin = useIsAdmin();
 
   const statusFilter = useMemo(() => {
     const statusParam = searchParams.get('status');
-    if (!statusParam) return undefined;
-    return statusValues.has(statusParam as DocumentStatus) ? (statusParam as DocumentStatus) : undefined;
+    return DOCUMENT_STATUS_ORDER.find((status) => status === statusParam);
   }, [searchParams]);
 
+  const [applied, setApplied] = useState<AppliedFilters>(() =>
+    createEmptyFilters(readStoredProjectId()),
+  );
+  const [sortBy, setSortBy] = useState<DocumentSortBy>('upload-newest');
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [filterDefinitions, setFilterDefinitions] = useState<FilterDefinition[]>([]);
+
+  const [snapshot, setSnapshot] = useState<ListSnapshot | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string>('');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [pageAlert, setPageAlert] = useState<PageAlert | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Persist project in sessionStorage
   useEffect(() => {
+    writeStoredProjectId(applied.projectId);
+  }, [applied.projectId]);
+
+  // Load filter definitions
+  useEffect(() => {
+    let isActive = true;
     filtersService
       .listFilters()
-      .then(setFilterDefs)
+      .then((data) => {
+        if (!isActive) return;
+        setFilterDefinitions(sortFilterDefinitions(data));
+      })
       .catch((err) => console.error('Failed to fetch filters:', err));
+    return () => {
+      isActive = false;
+    };
   }, []);
 
+  // Load projects
   useEffect(() => {
-    sessionStorage.setItem(projectStorageKey, selectedProjectId);
-  }, [selectedProjectId]);
-
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const data = await projectsService.listProjects('uploadable');
+    let isActive = true;
+    projectsService
+      .listProjects('uploadable')
+      .then((data) => {
+        if (!isActive) return;
         setProjects(data);
-      } catch (err) {
-        console.error('Failed to fetch projects:', err);
-      }
+        setApplied((prev) =>
+          prev.projectId !== ALL_PROJECTS && !data.some((p) => p.id === prev.projectId)
+            ? { ...prev, projectId: ALL_PROJECTS }
+            : prev,
+        );
+      })
+      .catch((err) => console.error('Failed to fetch projects:', err));
+    return () => {
+      isActive = false;
     };
-
-    fetchProjects();
   }, []);
 
+  // Fetch cycle
   useEffect(() => {
-    const fetchDocuments = async () => {
-      try {
-        setIsLoading(true);
-        const apiDocuments = await documentsService.listDocuments({
-          projectId: selectedProjectId !== allProjectsValue ? selectedProjectId : undefined,
-          mainFilter,
-          customFilters: customFilterValues,
-          status: statusFilter,
-          sortBy,
+    let isActive = true;
+    setIsLoading(true);
+    const query = toListQuery(applied, statusFilter, sortBy);
+
+    Promise.all([
+      documentsService.listDocuments(query),
+      documentsService.getStatusCounts(query).catch(() => null),
+    ])
+      .then(([apiDocs, counts]) => {
+        if (!isActive) return;
+        setSnapshot({
+          documents: apiDocs.map(convertApiDocument),
+          counts,
+          updatedAt: new Date(),
         });
-        const convertedDocuments = apiDocuments.map(convertApiDocument);
-        setDocuments(convertedDocuments);
-        setError('');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load documents');
-        console.error('Failed to fetch documents:', err);
-      } finally {
+        setLoadError('');
+      })
+      .catch((err) => {
+        if (!isActive) return;
+        setSnapshot(null);
+        setLoadError(err instanceof Error ? err.message : 'Failed to load documents');
+      })
+      .finally(() => {
+        if (!isActive) return;
         setIsLoading(false);
-      }
+      });
+
+    return () => {
+      isActive = false;
     };
+  }, [applied, statusFilter, sortBy, reloadKey]);
 
-    fetchDocuments();
-  }, [selectedProjectId, mainFilter, customFilterValues, statusFilter, sortBy]);
+  const rows = snapshot?.documents ?? EMPTY_DOCUMENTS;
+  const counts = snapshot?.counts ?? null;
 
-  // Fetch selected document details when ID is in URL
+  // Preview document
   useEffect(() => {
     if (!id) {
       setSelectedDocument(null);
       return;
     }
-
-    const existing = documents.find((doc) => doc.id === id);
+    const existing = rows.find((d) => d.id === id);
     if (existing) {
       setSelectedDocument(existing);
       return;
     }
-
-    const fetchDocument = async () => {
-      try {
-        const apiDoc = await documentsService.getDocument(id);
-        const doc = convertApiDocument(apiDoc);
-        setSelectedDocument(doc);
-      } catch (err) {
+    let isActive = true;
+    documentsService
+      .getDocument(id)
+      .then((apiDoc) => {
+        if (!isActive) return;
+        setSelectedDocument(convertApiDocument(apiDoc));
+      })
+      .catch((err) => {
+        if (!isActive) return;
         console.error('Failed to fetch document:', err);
         setSelectedDocument(null);
-      }
+      });
+    return () => {
+      isActive = false;
     };
+  }, [id, rows]);
 
-    fetchDocument();
-  }, [id, documents]);
+  // Selection reset on result key change (adjust state during render)
+  const resultKey = JSON.stringify([applied, statusFilter ?? null, sortBy]);
+  const [selectionKey, setSelectionKey] = useState(resultKey);
+  if (selectionKey !== resultKey) {
+    setSelectionKey(resultKey);
+    setSelectedIds(new Set());
+  }
 
-  const selectedProjectName = useMemo(() => {
-    if (selectedProjectId === allProjectsValue) {
-      return allProjectsLabel;
+  // Derived values
+  const total = counts ? getMatchingTotal(counts, statusFilter) : rows.length;
+  const isCapped = counts ? total > DOCUMENT_LIST_LIMIT : rows.length >= DOCUMENT_LIST_LIMIT;
+  const totalBytes = rows.reduce((acc, doc) => acc + (doc.sizeBytes ?? 0), 0);
+  const selectedRows = rows.filter((d) => selectedIds.has(d.id));
+  const projectName =
+    applied.projectId === ALL_PROJECTS
+      ? null
+      : projects.find((p) => p.id === applied.projectId)?.name ?? null;
+
+  const chips = buildFilterChips({
+    filters: applied,
+    projectName,
+    definitions: filterDefinitions,
+    status: statusFilter,
+  });
+  const appliedFilterCount = countAppliedFilters(applied, filterDefinitions);
+  const hasFilters = hasActiveFilters(applied, statusFilter);
+
+  const countLabel = !snapshot
+    ? null
+    : isCapped
+    ? `Showing the first ${DOCUMENT_LIST_LIMIT} documents — narrow with filters`
+    : `Showing ${formatCountLabel(rows.length, 'document', 'documents')}`;
+
+  const setStatusParam = (status: DocumentStatus | null) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (status) {
+      nextParams.set('status', status);
+    } else {
+      nextParams.delete('status');
     }
-    return projects.find((project) => project.id === selectedProjectId)?.name || allProjectsLabel;
-  }, [projects, selectedProjectId]);
+    setSearchParams(nextParams);
+  };
 
-  const activeFilterTags = [
-    selectedProjectId !== allProjectsValue ? { key: 'project', label: `Project: ${selectedProjectName}` } : null,
-    mainFilter ? { key: 'mainFilter', label: `Main: ${mainFilter}` } : null,
-    ...filterDefs.map((def) => {
-      const raw = customFilterValues[def.id];
-      if (!raw) return null;
-      const label =
-        def.type === 'DATE'
-          ? `${def.name}: ${raw.from || 'Any'} to ${raw.to || 'Any'}`
-          : `${def.name}: ${raw.value}`;
-      return raw.value || raw.from || raw.to ? { key: `custom:${def.id}`, label } : null;
-    }),
-    statusFilter ? { key: 'status', label: `Status: ${statusLabelMap[statusFilter]}` } : null,
-  ].filter((tag): tag is { key: string; label: string } => Boolean(tag));
+  const handleProjectChange = (projectId: string) => {
+    setApplied((prev) => ({ ...prev, projectId }));
+  };
 
-  const handleSelectDocument = (docId: string) => {
-    navigate(`/documents/${docId}`);
+  const handleApplyFilters = (next: AppliedFilters) => {
+    setApplied(next);
+  };
+
+  const handleClearPopoverFilters = () => {
+    setApplied(createEmptyFilters());
+  };
+
+  const handleClearAllFilters = () => {
+    setApplied(createEmptyFilters());
+    setStatusParam(null);
+  };
+
+  const handleRemoveChip = (key: string) => {
+    if (key === 'project') {
+      setApplied((prev) => ({ ...prev, projectId: ALL_PROJECTS }));
+    } else if (key === 'keyword') {
+      setApplied((prev) => ({ ...prev, keyword: '' }));
+    } else if (key === 'status') {
+      setStatusParam(null);
+    } else if (key.startsWith('custom:')) {
+      const defId = key.slice(7);
+      setApplied((prev) => {
+        const nextCustom = { ...prev.customFilters };
+        delete nextCustom[defId];
+        return { ...prev, customFilters: nextCustom };
+      });
+    }
+  };
+
+  const handleSortChange = (next: DocumentSortBy) => {
+    setSortBy(next);
+  };
+
+  const handleShowFailed = () => {
+    setStatusParam('FAILED');
+  };
+
+  const handleOpenPreview = (docId: string) => {
+    navigate({ pathname: `/documents/${docId}`, search: location.search });
   };
 
   const handleClosePreview = () => {
-    navigate('/documents');
+    navigate({ pathname: '/documents', search: location.search });
   };
 
   const handleToggleSelect = (docId: string) => {
     setSelectedIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(docId)) {
-        newSet.delete(docId);
+      const next = new Set(prev);
+      if (next.has(docId)) {
+        next.delete(docId);
       } else {
-        newSet.add(docId);
+        next.add(docId);
       }
-      return newSet;
+      return next;
     });
   };
 
   const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(new Set(documents.map((d) => d.id)));
-    } else {
-      setSelectedIds(new Set());
-    }
-  };
-
-  const handleExportSelected = () => {
-    setShowExportModal(true);
-  };
-
-  const handleDownloadDocument = async (documentId: string) => {
-    try {
-      await downloadDocument(documentId);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to download document');
-    }
-  };
-
-  const handleDeleteSelected = async () => {
-    if (!confirm(`Delete ${selectedIds.size} selected documents? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      const selectedIdsSnapshot = new Set(selectedIds);
-      const result = await documentsService.bulkDeleteDocuments(Array.from(selectedIdsSnapshot));
-      
-      // Show result if some failed
-      if (result.failed.length > 0) {
-        alert(`Deleted ${result.deleted} documents. Failed to delete ${result.failed.length} documents.`);
-      }
-
-      const failedSet = new Set(result.failed);
-      const deletedIds = Array.from(selectedIdsSnapshot).filter((id) => !failedSet.has(id));
-      
-      // Clear selection
-      setSelectedIds(new Set());
-      
-      // Update list with only successfully deleted documents removed.
-      setDocuments((prev) => prev.filter((d) => !deletedIds.includes(d.id)));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete documents');
-    }
+    setSelectedIds(checked ? new Set(rows.map((d) => d.id)) : new Set());
   };
 
   const handleClearSelection = () => {
     setSelectedIds(new Set());
   };
 
-  const removeFilterTag = (key: string) => {
-    if (key === 'project') setSelectedProjectId(allProjectsValue);
-    if (key === 'mainFilter') setMainFilter('');
-    if (key === 'status') {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete('status');
-      setSearchParams(nextParams);
-    }
-    if (key.startsWith('custom:')) {
-      const filterId = key.slice('custom:'.length);
-      setCustomFilterValues((prev) => {
-        const next = { ...prev };
-        delete next[filterId];
-        return next;
+  const handleDownloadDocument = async (docId: string) => {
+    try {
+      await downloadDocument(docId);
+    } catch (err) {
+      setPageAlert({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'Failed to download document',
       });
     }
   };
 
+  const handleRetryProcessing = (_docId: string) => {
+    void _docId;
+    // TODO(backend): endpoint to re-run text extraction for a FAILED document (for example POST /documents/:id/retry), then reload the list.
+  };
+
+  const handleGenerateRegisterPdf = () => {
+    // TODO(backend): endpoint that renders the filtered document register as a PDF.
+  };
+
+  const handleExportShownCsv = () => {
+    downloadCsv(documentsCsvFileName(new Date()), buildDocumentsCsv(rows));
+  };
+
+  const handleExportSelectedCsv = () => {
+    downloadCsv(documentsCsvFileName(new Date()), buildDocumentsCsv(selectedRows));
+  };
+
+  const handleOpenZipExport = () => {
+    setShowExportModal(true);
+  };
+
+  const handleRequestDelete = () => {
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const result = await documentsService.bulkDeleteDocuments(ids);
+      if (result.failed.length > 0) {
+        setPageAlert({
+          tone: 'warning',
+          message: `${formatCountLabel(result.deleted, 'document', 'documents')} moved to the recycle bin. ${formatCount(result.failed.length)} couldn't be deleted.`,
+        });
+      } else {
+        setPageAlert(null);
+      }
+      setSelectedIds(new Set());
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setPageAlert({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'Failed to delete documents',
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+    }
+  };
+
+  const handleRetryLoad = () => {
+    setLoadError('');
+    setReloadKey((k) => k + 1);
+  };
+
+  const exportItems: MenuItem[] = [
+    {
+      id: 'export-shown',
+      label: `Export shown as CSV (${formatCount(rows.length)})`,
+      disabled: rows.length === 0,
+      onSelect: handleExportShownCsv,
+    },
+    {
+      id: 'export-selected-csv',
+      label: `Export selected as CSV (${formatCount(selectedRows.length)})`,
+      disabled: selectedRows.length === 0,
+      onSelect: handleExportSelectedCsv,
+    },
+    {
+      id: 'export-selected-zip',
+      label: `Download selected as ZIP (${formatCount(selectedIds.size)})`,
+      disabled: selectedIds.size === 0,
+      onSelect: handleOpenZipExport,
+    },
+    {
+      id: 'generate-pdf',
+      label: 'Generate register PDF',
+      dividerBefore: true,
+      onSelect: handleGenerateRegisterPdf,
+    },
+  ];
+
   return (
-    <>
-      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/40 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project</label>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="h-10 min-w-56 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm text-slate-700 dark:text-slate-200"
-              >
-                <option value={allProjectsValue}>{allProjectsLabel}</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+    <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+      <div
+        className={`flex min-h-0 flex-1 flex-col gap-2 px-4 pt-3 ${
+          selectedIds.size > 0 ? 'pb-20' : 'pb-4'
+        }`}
+      >
+        <DocumentsToolbar
+          projects={projects}
+          isAdmin={isAdmin}
+          applied={applied}
+          filterDefinitions={filterDefinitions}
+          appliedFilterCount={appliedFilterCount}
+          sortBy={sortBy}
+          countLabel={countLabel}
+          exportItems={exportItems}
+          onProjectChange={handleProjectChange}
+          onApplyFilters={handleApplyFilters}
+          onClearPopoverFilters={handleClearPopoverFilters}
+          onSortChange={handleSortChange}
+        />
 
-              <button
-                type="button"
-                onClick={() => setIsFilterPanelOpen((prev) => !prev)}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-primary"
-              >
-                <span className="material-symbols-outlined text-[16px]">filter_list</span>
-                Filter
-              </button>
+        <DocumentFilterChips
+          chips={chips}
+          onRemove={handleRemoveChip}
+          onClearAll={handleClearAllFilters}
+        />
 
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Sort</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="h-10 min-w-52 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm text-slate-700 dark:text-slate-200"
-              >
-                <option value="upload-newest">Date Uploaded: Newest first</option>
-                <option value="upload-oldest">Date Uploaded: Oldest first</option>
-                <option value="name-asc">Document Name: A to Z</option>
-                <option value="name-desc">Document Name: Z to A</option>
-                <option value="status">Status</option>
-              </select>
-            </div>
-
-            <div className="text-sm text-slate-500">
-              Showing 1-{documents.length} of {documents.length}
-            </div>
-          </div>
-
-          {activeFilterTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              {activeFilterTags.map((tag) => (
-                <button
-                  key={tag.key}
-                  type="button"
-                  onClick={() => removeFilterTag(tag.key)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200/70 dark:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-100"
-                >
-                  {tag.label}
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {isFilterPanelOpen && (
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Main Filter</label>
-                  <input
-                    type="text"
-                    value={mainFilter}
-                    onChange={(e) => setMainFilter(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                    placeholder="Search filename or document text"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Project</label>
-                  <select
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                  >
-                    <option value={allProjectsValue}>{allProjectsLabel}</option>
-                    {projects.map((project) => (
-                      <option key={`filter-${project.id}`} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {filterDefs.map((def) => {
-                  const raw = customFilterValues[def.id] ?? {};
-                  if (def.type === 'DATE') {
-                    return (
-                      <div key={def.id}>
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                          {def.name} (range)
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="date"
-                            value={raw.from ?? ''}
-                            onChange={(e) => setCustomFilterValue(def.id, { from: e.target.value })}
-                            className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                          />
-                          <span className="text-slate-500">to</span>
-                          <input
-                            type="date"
-                            value={raw.to ?? ''}
-                            onChange={(e) => setCustomFilterValue(def.id, { to: e.target.value })}
-                            className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                          />
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={def.id}>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                        {def.name}
-                      </label>
-                      <input
-                        type={def.type === 'NUMBER' ? 'number' : 'text'}
-                        value={raw.value ?? ''}
-                        onChange={(e) => setCustomFilterValue(def.id, { value: e.target.value })}
-                        className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-                        placeholder={def.type === 'NUMBER' ? 'e.g. 500' : `Enter ${def.name.toLowerCase()}`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-xs text-slate-500">Filters are applied server-side and reflect uploaded documents.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedProjectId(allProjectsValue);
-                    setMainFilter('');
-                    setCustomFilterValues({});
-                  }}
-                  className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary"
-                >
-                  Clear all
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {isLoading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-              <p className="text-slate-500">Loading documents...</p>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <span className="material-symbols-outlined text-5xl text-red-500 mb-4">error</span>
-              <p className="text-red-600 dark:text-red-400 font-medium mb-2">Failed to load documents</p>
-              <p className="text-sm text-slate-500">{error}</p>
-            </div>
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-700 mb-4">folder_open</span>
-              <p className="text-slate-600 dark:text-slate-400 font-medium mb-2">No documents yet</p>
-              <p className="text-sm text-slate-500 mb-4">Upload your first PDF to get started</p>
-              <button
-                onClick={() => navigate('/upload')}
-                className="bg-primary hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
-              >
-                Upload Document
-              </button>
-            </div>
-          </div>
-        ) : (
-          <DocumentTable
-            documents={documents}
-            selectedDocumentId={selectedDocument?.id || null}
-            selectedIds={selectedIds}
-            onSelectDocument={handleSelectDocument}
-            onToggleSelect={handleToggleSelect}
-            onSelectAll={handleSelectAll}
-            onDownloadDocument={handleDownloadDocument}
-          />
+        {pageAlert && (
+          <InlineAlert tone={pageAlert.tone} onDismiss={() => setPageAlert(null)}>
+            {pageAlert.message}
+          </InlineAlert>
         )}
-      </main>
+
+        {isLoading && (
+          <p className="sr-only" role="status">
+            Loading documents…
+          </p>
+        )}
+
+        {loadError && !isLoading ? (
+          <div className="flex flex-col items-start gap-3">
+            <InlineAlert tone="error">
+              <p className="font-medium">Couldn't load documents.</p>
+              <p>{loadError}</p>
+            </InlineAlert>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="refresh"
+              onClick={handleRetryLoad}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : rows.length === 0 && !isLoading ? (
+          hasFilters ? (
+            <EmptyState
+              className="rounded border border-line"
+              icon="filter_alt_off"
+              title="No documents match these filters"
+              description="Remove a filter or clear them all."
+              action={
+                <Button variant="secondary" size="sm" onClick={handleClearAllFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              className="rounded border border-line"
+              icon="folder_open"
+              title="No documents yet"
+              description="Upload PDF, JPG or PNG files to add them to the register."
+              action={
+                <ButtonLink to="/upload" variant="dark" size="sm" icon="add">
+                  Upload document
+                </ButtonLink>
+              }
+            />
+          )
+        ) : (
+          <>
+            <DocumentTable
+              documents={rows}
+              isLoading={isLoading}
+              selectedIds={selectedIds}
+              sortBy={sortBy}
+              onSortChange={handleSortChange}
+              onOpenPreview={handleOpenPreview}
+              onToggleSelect={handleToggleSelect}
+              onSelectAll={handleSelectAll}
+              onDownload={handleDownloadDocument}
+              onRetry={handleRetryProcessing}
+            />
+            {snapshot && rows.length > 0 && (
+              <DocumentsSummaryBar
+                total={total}
+                totalBytes={totalBytes}
+                shownCount={rows.length}
+                isCapped={isCapped}
+                updatedAt={snapshot.updatedAt}
+                counts={counts}
+                isFailedFilterActive={statusFilter === 'FAILED'}
+                onShowFailed={handleShowFailed}
+              />
+            )}
+          </>
+        )}
+      </div>
 
       {selectedDocument && (
         <DocumentPreviewModal
-          document={selectedDocument} 
+          document={selectedDocument}
+          filterDefinitions={filterDefinitions}
           onClose={handleClosePreview}
         />
       )}
@@ -491,18 +550,36 @@ export default function Documents() {
       {selectedIds.size > 0 && (
         <BulkActionBar
           selectedCount={selectedIds.size}
-          onExport={handleExportSelected}
-          onDelete={handleDeleteSelected}
+          onExport={handleOpenZipExport}
+          onExportCsv={handleExportSelectedCsv}
+          onDelete={handleRequestDelete}
           onClear={handleClearSelection}
         />
       )}
 
-      <ExportModal 
-        isOpen={showExportModal} 
-        onClose={() => setShowExportModal(false)} 
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
         documentIds={Array.from(selectedIds)}
       />
 
-    </>
+      <ConfirmDialog
+        isOpen={isDeleteConfirmOpen}
+        title={
+          selectedIds.size === 1
+            ? 'Delete 1 document?'
+            : `Delete ${formatCount(selectedIds.size)} documents?`
+        }
+        message={
+          selectedIds.size === 1
+            ? "It'll move to the recycle bin. An admin can restore it for 30 days."
+            : "They'll move to the recycle bin. An admin can restore them for 30 days."
+        }
+        confirmLabel="Delete"
+        isConfirming={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+      />
+    </main>
   );
 }

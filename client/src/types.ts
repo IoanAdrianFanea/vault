@@ -20,6 +20,9 @@ export interface Document {
   pageCount?: number;
   extractedText?: string;
   filterValues?: DocumentFilterValue[];
+  projectName?: string;
+  sizeBytes?: number;
+  uploadedAt?: string;
 }
 
 export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';

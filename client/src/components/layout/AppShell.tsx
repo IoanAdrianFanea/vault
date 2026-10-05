@@ -8,7 +8,8 @@ import {
 } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ProfileSettingsModal } from './ProfileSettingsModal';
-import { authService, type User } from '../../api/auth';
+import { CurrentUserContext, type CurrentUserState } from './currentUser';
+import { authService } from '../../api/auth';
 import {
   documentsService,
   type DocumentStatus,
@@ -28,11 +29,6 @@ interface AppShellProps {
 }
 
 const STATUS_FILTER_COLLAPSED_KEY = 'shell:statusFilterCollapsed';
-
-type ShellUserState =
-  | { status: 'loading' }
-  | { status: 'ready'; user: User }
-  | { status: 'error' };
 
 function readStatusFilterCollapsed(): boolean {
   try {
@@ -93,7 +89,7 @@ export function AppShell({ children }: AppShellProps) {
   const isAdminPage = location.pathname.startsWith('/admin');
   const isSearchPage = location.pathname.startsWith('/search');
 
-  const [userState, setUserState] = useState<ShellUserState>(() => {
+  const [userState, setUserState] = useState<CurrentUserState>(() => {
     if (typeof window !== 'undefined' && !sessionStorage.getItem('accessToken')) {
       return { status: 'error' };
     }
@@ -233,7 +229,7 @@ export function AppShell({ children }: AppShellProps) {
   };
 
   return (
-    <>
+    <CurrentUserContext value={userState}>
       <div className="h-screen flex flex-col overflow-hidden bg-canvas font-sans">
         <header className="relative z-header h-16 shrink-0 flex items-center gap-6 px-4 bg-canvas border-b border-line">
           <div className="flex items-center gap-2.5 shrink-0">
@@ -412,6 +408,6 @@ export function AppShell({ children }: AppShellProps) {
         isOpen={isProfileSettingsOpen}
         onClose={handleProfileSettingsClose}
       />
-    </>
+    </CurrentUserContext>
   );
 }

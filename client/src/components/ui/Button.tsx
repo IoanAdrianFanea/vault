@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, Ref } from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { buttonClassName, type ButtonSize, type ButtonVariant } from './buttonStyles';
 import { Spinner } from './Spinner';
@@ -8,6 +8,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   icon?: string;
   loading?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export interface ButtonLinkProps extends LinkProps {
@@ -24,6 +25,7 @@ export function Button({
   loading = false,
   disabled,
   className,
+  ref,
   children,
   ...rest
 }: ButtonProps) {
@@ -31,6 +33,7 @@ export function Button({
 
   return (
     <button
+      ref={ref}
       type={type}
       disabled={isDisabled}
       aria-busy={loading ? 'true' : undefined}
