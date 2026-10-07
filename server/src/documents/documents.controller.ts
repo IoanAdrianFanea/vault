@@ -14,9 +14,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DocumentsService } from './documents.service';
+import { DocumentUploadInterceptor } from './upload-file.interceptor';
+import { detectFileType } from './file-signature.util';
 import { SearchQueryDto } from './dto/search-query.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
@@ -34,7 +35,7 @@ export class DocumentsController {
    * Upload a PDF or image file
    */
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUploadInterceptor)
   async uploadDocument(
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadDocumentDto,
@@ -55,6 +56,10 @@ export class DocumentsController {
       throw new BadRequestException(
         'Only PDF, JPEG, and PNG files are supported',
       );
+    }
+
+    if (detectFileType(file.buffer) !== file.mimetype) {
+      throw new BadRequestException("This file isn't a valid PDF, JPG or PNG.");
     }
 
     return this.documentsService.uploadDocument(
@@ -108,8 +113,8 @@ export class DocumentsController {
     const { buffer, filename, mimeType } =
       await this.exportsService.downloadDocument(id, userId);
 
+    res.attachment(filename);
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
   }
 

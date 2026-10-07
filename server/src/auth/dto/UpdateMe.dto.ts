@@ -1,4 +1,6 @@
+import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString } from 'class-validator';
+import { normalizeEmail } from '../../common/email.util';
 
 export class ProfileDto {
   @IsOptional()
@@ -7,6 +9,7 @@ export class ProfileDto {
 
   // Changing this re-triggers email verification (see AuthService.updateMe)
   @IsOptional()
+  @Transform(({ value }) => normalizeEmail(value))
   @IsEmail()
   email?: string;
 

@@ -1,3 +1,5 @@
+import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export type ArchiveOperation = 'ARCHIVING' | 'UNARCHIVING' | 'DELETING';
@@ -109,8 +111,10 @@ export async function downloadProjectArchive(
   }
 
   const contentDisposition = response.headers.get('Content-Disposition');
-  const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
-  const filename = filenameMatch ? filenameMatch[1] : `${fallbackName}-archive.zip`;
+  const filename = getFilenameFromContentDisposition(
+    contentDisposition,
+    `${fallbackName}-archive.zip`,
+  );
 
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);

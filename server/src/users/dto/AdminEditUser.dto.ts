@@ -1,4 +1,6 @@
+import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { normalizeEmail } from '../../common/email.util';
 
 /**
  * DTO for admin editing any user's profile.
@@ -10,6 +12,7 @@ export class AdminEditUserDto {
   fullName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeEmail(value))
   @IsEmail()
   email?: string;
 

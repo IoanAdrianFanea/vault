@@ -9,6 +9,11 @@ export class EmailService {
   private readonly from: string;
   private readonly frontendUrl: string;
   private readonly configured: boolean;
+  private readonly isProduction: boolean;
+
+  isConfigured(): boolean {
+    return this.configured;
+  }
 
   constructor(private readonly config: ConfigService) {
     const host = config.get<string>('SMTP_HOST');
@@ -19,6 +24,7 @@ export class EmailService {
       config.get<string>('SMTP_FROM') ?? 'DocIndex <noreply@docindex.local>';
     this.frontendUrl =
       config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    this.isProduction = config.get<string>('NODE_ENV') === 'production';
 
     this.configured = Boolean(host && user && pass);
 
@@ -30,10 +36,16 @@ export class EmailService {
         auth: { user, pass },
       });
     } else {
-      this.logger.warn(
-        'SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS missing). ' +
-          'Emails will be logged to console only.',
-      );
+      if (this.isProduction) {
+        this.logger.warn(
+          'SMTP is not configured: emails will not be sent. Create accounts from the admin page.',
+        );
+      } else {
+        this.logger.warn(
+          'SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS missing). ' +
+            'Emails will be logged to console only.',
+        );
+      }
     }
   }
 
@@ -50,7 +62,7 @@ export class EmailService {
       <p>This link is valid for 24 hours.</p>
       <p>If you did not create this account, you can ignore this email.</p>
     `;
-    await this.send(email, subject, html);
+    await this.send(email, subject, html, 'verification');
   }
 
   /**
@@ -73,17 +85,30 @@ export class EmailService {
 
     // Send to each admin individually so no admin sees other admins' addresses
     await Promise.allSettled(
-      adminEmails.map((admin) => this.send(admin, subject, html)),
+      adminEmails.map((admin) =>
+        this.send(admin, subject, html, 'admin-approval'),
+      ),
     );
   }
 
-  private async send(to: string, subject: string, html: string): Promise<void> {
+  private async send(
+    to: string,
+    subject: string,
+    html: string,
+    type: 'verification' | 'admin-approval',
+  ): Promise<void> {
     const mail = { from: this.from, to, subject, html };
 
     if (!this.configured) {
-      this.logger.log(
-        `[EMAIL NOT SENT — SMTP unconfigured]\nTo: ${to}\nSubject: ${subject}\n${html}`,
-      );
+      if (this.isProduction) {
+        this.logger.log(
+          `email not sent (SMTP not configured): ${type} to ${to}`,
+        );
+      } else {
+        this.logger.log(
+          `[EMAIL NOT SENT — SMTP unconfigured]\nTo: ${to}\nSubject: ${subject}\n${html}`,
+        );
+      }
       return;
     }
 

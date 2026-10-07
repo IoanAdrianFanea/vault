@@ -63,9 +63,9 @@ export class ArchiveController {
     const { stream, filename, sizeBytes } =
       await this.archiveService.getArchiveDownload(id, userId);
 
+    res.attachment(filename);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Length', sizeBytes);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     pipeline(stream, res, (err) => {
       if (err) {

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { RecycleBinService } from './recycle-bin.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { DELETION_RETENTION_DAYS } from '../common/deletion.constants';
 
 /**
@@ -13,7 +14,10 @@ export class PurgeTask {
   private readonly logger = new Logger(PurgeTask.name);
   private isRunning = false;
 
-  constructor(private readonly recycleBinService: RecycleBinService) {}
+  constructor(
+    private readonly recycleBinService: RecycleBinService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM, { name: 'purge-expired-documents' })
   async handlePurge(): Promise<void> {
@@ -38,6 +42,24 @@ export class PurgeTask {
       if (purged > 0) {
         this.logger.log(
           `Permanently deleted ${purged} document(s) older than ${DELETION_RETENTION_DAYS} days`,
+        );
+      }
+
+      try {
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const { count } = await this.prisma.refreshToken.deleteMany({
+          where: {
+            OR: [
+              { expiresAt: { lt: now } },
+              { revokedAt: { lt: oneDayAgo } },
+            ],
+          },
+        });
+        this.logger.log(`Pruned ${count} old refresh token(s)`);
+      } catch (pruneError) {
+        this.logger.error(
+          `Failed to prune old refresh tokens: ${String(pruneError)}`,
         );
       }
     } catch (error) {

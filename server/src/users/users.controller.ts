@@ -48,7 +48,7 @@ export class UsersController {
     if (userRole !== 'ADMIN') {
       throw new BadRequestException('Only admins can access this resource');
     }
-    return this.usersService.setUserRole(id, setUserDto);
+    return this.usersService.setUserRole(req.user.id, id, setUserDto);
   }
 
   // edit user profile (name, email, password) - ADMIN ONLY
@@ -112,7 +112,7 @@ export class UsersController {
     if (req.user?.role !== 'ADMIN') {
       throw new ForbiddenException('Only admins can access this resource');
     }
-    return this.usersService.updateAccountStatus(id, dto.status);
+    return this.usersService.updateAccountStatus(req.user.id, id, dto.status);
   }
 
   // delete user by ID - ADMIN ONLY
@@ -123,7 +123,7 @@ export class UsersController {
     if (userRole !== 'ADMIN') {
       throw new BadRequestException('Only admins can access this resource');
     }
-    await this.usersService.deleteUser(id);
+    await this.usersService.deleteUser(req.user.id, id);
   }
 
   // retrieve user by ID - ALL

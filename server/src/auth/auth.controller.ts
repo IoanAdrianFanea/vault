@@ -14,7 +14,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { parseDurationMs } from './duration.util';
+import { FIFTEEN_MINUTES_MS } from '../common/throttle';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -29,9 +33,13 @@ interface RequestWithUser extends Request {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   // POST /auth/register - Create new user account (returns pending message, no tokens)
+  @Throttle({ default: { limit: 10, ttl: FIFTEEN_MINUTES_MS } })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() dto: RegisterDto) {
@@ -39,6 +47,7 @@ export class AuthController {
   }
 
   // GET /auth/verify-email?token=xxx - Verify email address from link in email
+  @Throttle({ default: { limit: 10, ttl: FIFTEEN_MINUTES_MS } })
   @Get('verify-email')
   @HttpCode(HttpStatus.OK)
   async verifyEmail(@Query('token') token: string) {
@@ -49,6 +58,7 @@ export class AuthController {
   }
 
   // POST /auth/login - Authenticate existing user
+  @Throttle({ default: { limit: 10, ttl: FIFTEEN_MINUTES_MS } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -128,8 +138,13 @@ export class AuthController {
   async changePassword(
     @Req() req: RequestWithUser,
     @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    await this.authService.changePassword(req.user.id, dto);
+    const { refreshToken } = await this.authService.changePassword(
+      req.user.id,
+      dto,
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
   }
 
   // Set refresh token in HttpOnly cookie (secure, not accessible via JavaScript)
@@ -138,7 +153,9 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      maxAge: parseDurationMs(
+        this.config.get<string>('JWT_REFRESH_TOKEN_EXPIRATION') ?? '7d',
+      ),
       path: '/',
     });
   }

@@ -1,50 +1,45 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { buildHelmetOptions } from './common/security-headers';
 
-const isProduction = process.env.NODE_ENV === 'production';
+const DEV_ORIGIN_PATTERNS = [
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
+  /^http:\/\/.+\.local:\d+$/,
+];
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // In production all API routes are prefixed with /api
+  const config = app.get(ConfigService);
+  const isProduction = config.get('NODE_ENV') === 'production';
+  const frontendUrl = config.get<string>('FRONTEND_URL');
+
+  // In production, trust the reverse proxy (Render) and prefix API routes
   if (isProduction) {
+    app.set('trust proxy', 1);
     app.setGlobalPrefix('api');
   }
+
+  app.use(helmet(buildHelmetOptions(frontendUrl)));
 
   // Enable CORS for frontend (allows cookies to be sent)
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g., curl, Postman)
-      if (!origin) {
+      if (!origin) return callback(null, true);
+      if (frontendUrl && origin === frontendUrl) return callback(null, true);
+      if (!isProduction && DEV_ORIGIN_PATTERNS.some((p) => p.test(origin)))
         return callback(null, true);
-      }
-
-      // In production, also allow the Render frontend URL
-      const frontendUrl = process.env.FRONTEND_URL;
-      if (isProduction && frontendUrl && origin === frontendUrl) {
-        return callback(null, true);
-      }
-
-      // Allow localhost on any port (handles localhost, 127.0.0.1, WSL hostnames)
-      const allowedOrigins = [
-        /^http:\/\/localhost:\d+$/,
-        /^http:\/\/127\.0\.0\.1:\d+$/,
-        /^http:\/\/.+\.local:\d+$/,
-      ];
-
-      const isAllowed = allowedOrigins.some((pattern) => pattern.test(origin));
-
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
+      return callback(null, false);
     },
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
   });
 
   // Parse cookies from requests (needed for refresh token)
@@ -73,6 +68,6 @@ async function bootstrap() {
     });
   }
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(config.get('PORT') ?? 3000);
 }
 bootstrap();

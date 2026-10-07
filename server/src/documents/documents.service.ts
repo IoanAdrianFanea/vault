@@ -84,7 +84,7 @@ export class DocumentsService {
       // Upload policy: admins can upload anywhere, users only to assigned projects.
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { role: true },
+        select: { role: true, email: true, fullName: true },
       });
 
       if (!user) {
@@ -109,6 +109,8 @@ export class DocumentsService {
 
       const documentCreateData = {
         uploadedById: userId,
+        uploadedByEmail: user.email,
+        uploadedByName: user.fullName?.trim() || null,
         projectId,
         originalFilename: file.originalname,
         mimeType: file.mimetype,
@@ -226,12 +228,17 @@ export class DocumentsService {
     } catch (error) {
       // Mark document as failed if any step fails
       if (documentId) {
+        this.logger.error(
+          `Processing failed for document ${documentId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
         await this.prisma.document.update({
           where: { id: documentId },
           data: {
             status: DocumentStatus.FAILED,
             errorMessage:
-              error instanceof Error ? error.message : 'Unknown error',
+              file.mimetype === 'application/pdf'
+                ? "Couldn't read text from this file."
+                : "Couldn't process this image.",
           },
         });
       }
@@ -451,6 +458,7 @@ export class DocumentsService {
         uploadedAt: true,
         status: true,
         errorMessage: true,
+        uploadedByEmail: true,
         uploadedBy: {
           select: {
             email: true,
@@ -474,7 +482,7 @@ export class DocumentsService {
       uploadedAt: doc.uploadedAt,
       status: doc.status,
       errorMessage: doc.errorMessage,
-      uploadedByEmail: doc.uploadedBy.email,
+      uploadedByEmail: doc.uploadedBy?.email ?? doc.uploadedByEmail ?? null,
     }));
   }
 

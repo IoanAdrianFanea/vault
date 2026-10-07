@@ -34,8 +34,8 @@ export class ExportsController {
     );
 
     // Set response headers
+    res.attachment(filename);
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     // Pipe the archive stream to the response
     stream.pipe(res);

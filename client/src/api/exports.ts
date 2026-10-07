@@ -1,3 +1,5 @@
+import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export interface DocumentBlobPayload {
@@ -27,8 +29,10 @@ export async function getDocumentBlob(documentId: string): Promise<DocumentBlobP
   }
 
   const contentDisposition = response.headers.get('Content-Disposition');
-  const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
-  const filename = filenameMatch ? filenameMatch[1] : `document-${documentId}.pdf`;
+  const filename = getFilenameFromContentDisposition(
+    contentDisposition,
+    `document-${documentId}.pdf`,
+  );
 
   return {
     blob: await response.blob(),
@@ -81,8 +85,10 @@ export async function exportDocuments(documentIds: string[]): Promise<void> {
 
     // Get filename from Content-Disposition header
     const contentDisposition = response.headers.get('Content-Disposition');
-    const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
-    const filename = filenameMatch ? filenameMatch[1] : 'documents-export.zip';
+    const filename = getFilenameFromContentDisposition(
+      contentDisposition,
+      'documents-export.zip',
+    );
 
     // Download the file
     const blob = await response.blob();

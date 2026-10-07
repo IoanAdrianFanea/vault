@@ -100,8 +100,10 @@ model Document {
   id               String         @id @default(cuid())
   projectId        String
   project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedById     String
-  uploadedBy       User           @relation("UploadedBy", fields: [uploadedById], references: [id], onDelete: Cascade)
+  uploadedById     String?
+  uploadedBy       User?          @relation("UploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedByEmail  String?
+  uploadedByName   String?
   originalFilename String
   storageKey       String
   mimeType         String

@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
+import { parseDurationMs } from './duration.util';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { RegisterDto } from './dto/register.dto';
@@ -19,10 +20,19 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { User } from '@prisma/client';
 import { ProfileDto } from './dto/UpdateMe.dto';
 
+export const ACCOUNT_NOT_ACTIVE_MESSAGE =
+  'Your account is no longer active. Contact an administrator.';
+export const EMAIL_CHANGE_NEEDS_SMTP_MESSAGE =
+  "Your email can't be changed here right now. Ask an admin to change it for you.";
+
 // JWT token payload structure
 interface JwtPayload {
   sub: string; // User ID
   email: string;
+}
+
+interface RefreshJwtPayload extends JwtPayload {
+  jti?: string;
 }
 
 // Return type for auth endpoints (access token + refresh token)
@@ -50,7 +60,7 @@ export class AuthService {
   // Create new user account — returns pending message, no tokens issued
   async register(dto: RegisterDto): Promise<RegisterResult> {
     // Check if user already exists
-    const existingUser = await this.usersService.findByEmail(dto.email);
+    const existingUser = await this.usersService.findByEmailInsensitive(dto.email);
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
@@ -95,7 +105,7 @@ export class AuthService {
   // Authenticate existing user
   async login(dto: LoginDto): Promise<AuthTokens> {
     // Find user
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.usersService.findByEmailInsensitive(dto.email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -133,13 +143,13 @@ export class AuthService {
   }
 
   // Exchange refresh token for new access token (token rotation)
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async refresh(refreshToken: string | undefined): Promise<AuthTokens> {
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token not provided');
     }
 
     // Verify and decode refresh token
-    let payload: JwtPayload;
+    let payload: RefreshJwtPayload;
     try {
       payload = this.jwtService.verify(refreshToken, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
@@ -148,20 +158,19 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    // Note: We don't hash the incoming token to search DB
-    // We search by userId and then verify against stored hash
+    if (!payload.jti) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
 
-    // Find the most recent non-revoked, non-expired refresh token for this user
+    // Find the non-revoked, non-expired refresh token by session ID
     const storedToken = await this.prisma.refreshToken.findFirst({
       where: {
+        id: payload.jti,
         userId: payload.sub,
         revokedAt: null,
         expiresAt: {
           gt: new Date(),
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
       },
     });
 
@@ -169,25 +178,32 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token not found or expired');
     }
 
-    // Verify token hash matches
-    const isTokenValid = await argon2.verify(
-      storedToken.tokenHash,
-      refreshToken,
-    );
-    if (!isTokenValid) {
+    // Timing-safe comparison of SHA-256 hash
+    const incomingBuffer = Buffer.from(this.sha256Hex(refreshToken), 'hex');
+    const storedBuffer = Buffer.from(storedToken.tokenHash, 'hex');
+    if (
+      incomingBuffer.length !== storedBuffer.length ||
+      !crypto.timingSafeEqual(incomingBuffer, storedBuffer)
+    ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-
-    // Revoke old refresh token
-    await this.prisma.refreshToken.update({
-      where: { id: storedToken.id },
-      data: { revokedAt: new Date() },
-    });
 
     // Get user
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+    if (user.accountStatus !== 'ACTIVE') {
+      throw new UnauthorizedException(ACCOUNT_NOT_ACTIVE_MESSAGE);
+    }
+
+    // Claim the row
+    const claimed = await this.prisma.refreshToken.updateMany({
+      where: { id: storedToken.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      throw new UnauthorizedException('Refresh token not found or expired');
     }
 
     // Generate new tokens (token rotation)
@@ -214,6 +230,9 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+    if (user.accountStatus !== 'ACTIVE') {
+      throw new UnauthorizedException(ACCOUNT_NOT_ACTIVE_MESSAGE);
+    }
     return user;
   }
 
@@ -234,27 +253,27 @@ export class AuthService {
       } as any,
     );
 
-    // Generate refresh token
+    const sessionId = crypto.randomUUID();
+    const refreshExpiration =
+      this.config.get<string>('JWT_REFRESH_TOKEN_EXPIRATION') || '7d';
+
+    // jwtid sets the jti claim
     const refreshToken = this.jwtService.sign(
       { sub: payload.sub, email: payload.email },
       {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn:
-          this.config.get<string>('JWT_REFRESH_TOKEN_EXPIRATION') || '7d',
-      } as any,
+        expiresIn: refreshExpiration as any,
+        jwtid: sessionId,
+      },
     );
 
-    // Hash refresh token before storing
-    const tokenHash = await argon2.hash(refreshToken);
-
-    // Calculate expiration date
-    const expirationString =
-      this.config.get<string>('JWT_REFRESH_TOKEN_EXPIRATION') || '7d';
-    const expiresAt = this.calculateExpirationDate(expirationString);
+    const tokenHash = this.sha256Hex(refreshToken);
+    const expiresAt = new Date(Date.now() + parseDurationMs(refreshExpiration));
 
     // Store hashed refresh token in database
     await this.prisma.refreshToken.create({
       data: {
+        id: sessionId,
         userId: user.id,
         tokenHash,
         expiresAt,
@@ -268,25 +287,8 @@ export class AuthService {
     };
   }
 
-  // Convert expiration string (e.g., '7d', '15m') to Date object
-  private calculateExpirationDate(expirationString: string): Date {
-    const value = parseInt(expirationString);
-    const unit = expirationString.slice(-1);
-
-    const now = new Date();
-
-    switch (unit) {
-      case 's':
-        return new Date(now.getTime() + value * 1000);
-      case 'm':
-        return new Date(now.getTime() + value * 60 * 1000);
-      case 'h':
-        return new Date(now.getTime() + value * 60 * 60 * 1000);
-      case 'd':
-        return new Date(now.getTime() + value * 24 * 60 * 60 * 1000);
-      default:
-        throw new BadRequestException('Invalid expiration format');
-    }
+  private sha256Hex(value: string): string {
+    return crypto.createHash('sha256').update(value).digest('hex');
   }
 
   // Verify email address using the raw token from the email link
@@ -319,7 +321,10 @@ export class AuthService {
   }
 
   // Change own password (requires current password)
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<{ refreshToken: string }> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -330,7 +335,7 @@ export class AuthService {
       dto.currentPassword,
     );
     if (!isCurrentValid) {
-      throw new UnauthorizedException('Current password is incorrect');
+      throw new BadRequestException('Current password is incorrect');
     }
 
     if (dto.currentPassword === dto.newPassword) {
@@ -340,7 +345,7 @@ export class AuthService {
     }
 
     const newHash = await argon2.hash(dto.newPassword);
-    await this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash: newHash, mustChangePassword: false },
     });
@@ -350,6 +355,9 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+
+    const { refreshToken } = await this.generateTokens(updatedUser);
+    return { refreshToken };
   }
 
   async updateMe(
@@ -378,20 +386,15 @@ export class AuthService {
     // Changing your own email resets verification and sends a fresh link.
     let verificationToken: string | null = null;
     if (dto.email !== undefined) {
-      const newEmail = dto.email.trim();
+      const newEmail = dto.email;
 
       if (newEmail.toLowerCase() !== existingUser.email.toLowerCase()) {
-        // SQLite LIKE is case-insensitive for ASCII, so `contains` gives a cheap
-        // candidate set; the exact comparison is done case-insensitively here.
-        const candidates = await this.prisma.user.findMany({
-          where: { email: { contains: newEmail } },
-          select: { id: true, email: true },
-        });
-        const emailOwner = candidates.find(
-          (candidate) =>
-            candidate.email.toLowerCase() === newEmail.toLowerCase(),
-        );
+        if (!this.emailService.isConfigured()) {
+          throw new BadRequestException(EMAIL_CHANGE_NEEDS_SMTP_MESSAGE);
+        }
 
+        const emailOwner =
+          await this.usersService.findByEmailInsensitive(newEmail);
         if (emailOwner && emailOwner.id !== userId) {
           throw new ConflictException('Email is already in use');
         }
