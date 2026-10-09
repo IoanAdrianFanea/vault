@@ -47,6 +47,7 @@ export interface DeletedDocumentSummary {
   retentionDays: number;
   restorable: boolean;
   requiresProjectChoice: boolean;
+  projectDeleted: boolean;
 }
 
 export interface DeletedProjectSummary {
@@ -71,19 +72,21 @@ export class RecycleBinService {
   ) {}
 
   /**
-   * List soft-deleted documents whose project is still active — admin only.
-   * Documents belonging to a deleted project are reached instead by drilling into that
-   * project via `listDeletedProjectDocuments`.
+   * List every soft-deleted document — admin only. This includes documents that were
+   * deleted along with their project (flagged by `projectDeleted`). Documents of a deleted
+   * archived project are left out because they only exist inside the project's archive zip,
+   * so they can't be restored one by one; they remain visible by drilling into that project
+   * via `listDeletedProjectDocuments`.
    */
   async listDeletedDocuments(
     userId: string,
   ): Promise<DeletedDocumentSummary[]> {
     await this.assertAdmin(userId);
 
-    return this.getDeletedDocumentSummaries({
-      deletedAt: { not: null },
-      project: { deletedAt: null },
-    });
+    return this.getDeletedDocumentSummaries(
+      { deletedAt: { not: null } },
+      { excludeZipBacked: true },
+    );
   }
 
   /**
@@ -155,8 +158,9 @@ export class RecycleBinService {
    */
   private async getDeletedDocumentSummaries(
     where: Prisma.DocumentWhereInput,
+    options: { excludeZipBacked?: boolean } = {},
   ): Promise<DeletedDocumentSummary[]> {
-    const documents = await this.prisma.document.findMany({
+    const found = await this.prisma.document.findMany({
       where,
       orderBy: { deletedAt: 'desc' },
       select: {
@@ -175,6 +179,12 @@ export class RecycleBinService {
         },
       },
     });
+
+    const documents = options.excludeZipBacked
+      ? found.filter(
+          (doc) => !this.isZipBacked(doc.deletedAt as Date, doc.project),
+        )
+      : found;
 
     if (documents.length === 0) {
       return [];
@@ -209,11 +219,7 @@ export class RecycleBinService {
       const deletedAt = doc.deletedAt as Date;
 
       const project = doc.project;
-      const isZipBacked =
-        !!project.archivedAt &&
-        !!project.deletedAt &&
-        deletedAt.getTime() === project.deletedAt.getTime();
-      const restorable = !isZipBacked;
+      const restorable = !this.isZipBacked(deletedAt, project);
       const requiresProjectChoice =
         project.deletedAt !== null || project.archivedAt !== null;
 
@@ -231,8 +237,24 @@ export class RecycleBinService {
         retentionDays: DELETION_RETENTION_DAYS,
         restorable,
         requiresProjectChoice,
+        projectDeleted: project.deletedAt !== null,
       };
     });
+  }
+
+  /**
+   * A document deleted together with an archived project has no file of its own: it lives
+   * inside the project's archive zip and can only come back with the whole project.
+   */
+  private isZipBacked(
+    documentDeletedAt: Date,
+    project: { deletedAt: Date | null; archivedAt: Date | null },
+  ): boolean {
+    return (
+      !!project.archivedAt &&
+      !!project.deletedAt &&
+      documentDeletedAt.getTime() === project.deletedAt.getTime()
+    );
   }
 
   /**
@@ -270,12 +292,7 @@ export class RecycleBinService {
       throw new NotFoundException('Deleted document not found');
     }
 
-    const isZipBacked =
-      !!document.project.archivedAt &&
-      !!document.project.deletedAt &&
-      document.deletedAt!.getTime() === document.project.deletedAt.getTime();
-
-    if (isZipBacked) {
+    if (this.isZipBacked(document.deletedAt as Date, document.project)) {
       throw new BadRequestException(
         'This document is stored inside its project archive. Restore the whole project instead.',
       );

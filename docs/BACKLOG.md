@@ -36,6 +36,10 @@ Open items only. Each one was checked against the current code.
 - **Automatic offsite backups:** nightly database copies stay on the persistent disk, and copying them off is manual. Planned for Phase 5.
 - **Print document button:** print with a preview. Low priority, Phase 5 if time allows.
 
+## Phase 6
+
+- **Bring the Jobs section back:** the sample-data page (`client/src/pages/Jobs.tsx`, `client/src/components/jobs/`) stays in the repo, unrouted. When Phase 6 adds real jobs, re-add the routes in `App.tsx` and the sidebar link in `AppShell.tsx`, and remove the toast and redirect.
+
 ## Phase 7 ideas
 
 - Email attachment ingestion: forward an email to a project address and upload the attachments automatically.

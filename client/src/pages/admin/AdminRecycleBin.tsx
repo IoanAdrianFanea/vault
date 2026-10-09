@@ -605,8 +605,19 @@ export default function AdminRecycleBin() {
                               {formatFileSize(doc.sizeBytes)}
                             </span>
                           </TableCell>
-                          <TableCell className="truncate">
-                            {doc.projectName}
+                          <TableCell>
+                            <span className="block truncate" title={doc.projectName}>
+                              {doc.projectName}
+                            </span>
+                            {doc.projectDeleted && (
+                              <Badge
+                                tone="slate"
+                                title="Its project is in the recycle bin. Restore it into an active project or delete it permanently."
+                                className="mt-0.5"
+                              >
+                                Project deleted
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="truncate">
                             {doc.deletedByName ?? doc.deletedByEmail ?? '—'}

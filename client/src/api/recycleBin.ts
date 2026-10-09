@@ -20,6 +20,7 @@ export interface DeletedDocument {
   retentionDays: number;
   restorable: boolean;
   requiresProjectChoice: boolean;
+  projectDeleted: boolean;
 }
 
 export interface DeletedProject {

@@ -4,7 +4,7 @@ A multi-user document indexing and retrieval tool for construction teams. For se
 
 ## Current position
 
-Phases 1 to 4.5 and the UI redesign are complete. **Phase 5 is next.** Phases 6 and 7 are not started, and the `/jobs` page is a sample-data preview of Phase 6.
+Phases 1 to 4.5 and the UI redesign are complete. **Phase 5 is next.** Phases 6 and 7 are not started, and the Jobs section is hidden until Phase 6.
 
 ## Goal and product rules
 
@@ -69,8 +69,11 @@ Status: **not started.** Native app evaluation, email attachment ingestion, offl
 - **Custom filters:** changing a filter's type discards values already entered for it. There is no way to edit a document's filter values after upload.
 - **Unused fields:** `User.language` and `User.timezone` are writable through `PATCH /auth/me` but never read.
 - **New projects** have no members until an admin adds some.
+- **Jobs:** the sidebar link shows a toast, and `/jobs` redirects to the documents list. The sample-data page and its components stay in `client/src/pages/Jobs.tsx` and `client/src/components/jobs/` for Phase 6.
+- **Live status:** upload processing (PDF text and OCR) runs inside the upload request, so a document is `PROCESSED` or `FAILED` when the upload returns. The Documents page still polls every 5 seconds while any listed document is in progress, for example one uploaded by someone else or left behind by a restart, and stops after 10 minutes.
+- **Deleted projects:** the recycle bin's Documents tab lists every deleted document, with a "Project deleted" badge on those removed with their project. Documents of a deleted archived project live only in the archive zip, so they appear only when you open that project.
 - **Single instance:** rate limits are in memory and the purge and backup jobs run in-process, so the API must run as one instance.
-- **Placeholders waiting for the backend:** Retry on failed documents, Generate register PDF in the export menu, and Download, Delete and Retry on the Jobs page. Each is a `TODO(backend)` handler that does nothing.
+- **Placeholders waiting for the backend:** Retry on failed documents, Generate register PDF in the export menu, and Download, Delete and Retry in the unrouted Jobs page. Each is a `TODO(backend)` handler that does nothing.
 - **PDF parsing:** `pdf-parse` 1.1.1 can throw spurious errors on some valid PDFs, which marks the upload `FAILED`. Consider a replacement.
 - **OCR:** `tesseract.js` needs an explicit `errorHandler`, otherwise a worker failure can crash the Node process. `ExtractionService` passes a no-op handler and treats OCR failures per document. The English language data is downloaded on first use.
 - **Archive recovery:** on start-up `ArchiveService` finishes any archive, restore or delete operation interrupted by a restart, using `Project.archiveOperation`.

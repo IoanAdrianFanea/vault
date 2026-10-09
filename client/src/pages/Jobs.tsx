@@ -1,6 +1,7 @@
 /*
 Preview page for background jobs, showing sample data in a table with a detail
-drawer. It is a placeholder until the backend has job processing.
+drawer. It is not routed yet and is kept for Phase 6, when the backend has job
+processing.
 */
 
 

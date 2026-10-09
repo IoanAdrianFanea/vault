@@ -1,11 +1,12 @@
 /*
 Main documents list: filters, sorting, status filter from the URL, bulk
 selection, ZIP and CSV export, delete and preview. It combines the toolbar,
-table and summary bar components and keeps the filters in the page state.
+table and summary bar components and keeps the filters in the page state. While
+documents are processing it quietly refreshes the list every few seconds.
 */
 
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Document, DocumentStatus } from '../types';
 import {
@@ -16,6 +17,7 @@ import { projectsService, type Project } from '../api/projects';
 import { filtersService, type FilterDefinition } from '../api/filters';
 import { downloadDocument } from '../api/exports';
 import { useIsAdmin } from '../components/layout/currentUser';
+import { useDocumentStatusRefresh } from '../components/layout/documentStatusRefresh';
 import {
   Button,
   ButtonLink,
@@ -23,6 +25,7 @@ import {
   DOCUMENT_STATUS_ORDER,
   EmptyState,
   InlineAlert,
+  useToast,
   type MenuItem,
 } from '../components/ui';
 import {
@@ -64,6 +67,11 @@ import { DocumentTable } from '../components/documents/DocumentTable';
 import { DocumentsSummaryBar } from '../components/documents/DocumentsSummaryBar';
 import { DocumentsToolbar } from '../components/documents/DocumentsToolbar';
 import { ExportModal } from '../components/documents/ExportModal';
+import {
+  countFinished,
+  describeFinished,
+  isInProgress,
+} from '../components/documents/documentProgress';
 
 interface ListSnapshot {
   documents: Document[];
@@ -78,12 +86,19 @@ interface PageAlert {
 
 const EMPTY_DOCUMENTS: Document[] = [];
 
+// While documents are processing the list is quietly refetched on this interval,
+// for at most POLL_MAX_MS of visible time.
+const POLL_INTERVAL_MS = 5_000;
+const POLL_MAX_MS = 10 * 60_000;
+
 export default function Documents() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = useIsAdmin();
+  const { showToast } = useToast();
+  const { refresh: refreshSidebarCounts } = useDocumentStatusRefresh();
 
   const statusFilter = useMemo(() => {
     const statusParam = searchParams.get('status');
@@ -102,6 +117,9 @@ export default function Documents() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const pollElapsedMsRef = useRef(0);
+  const rowsRef = useRef<Document[]>([]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
@@ -163,6 +181,8 @@ export default function Documents() {
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
+    setPollTimedOut(false);
+    pollElapsedMsRef.current = 0;
     const query = toListQuery(applied, statusFilter, sortBy);
 
     Promise.all([
@@ -195,6 +215,82 @@ export default function Documents() {
 
   const rows = snapshot?.documents ?? EMPTY_DOCUMENTS;
   const counts = snapshot?.counts ?? null;
+  const hasInProgress = rows.some((doc) => isInProgress(doc.status));
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+
+  // Quiet refresh while documents are processing. A failed poll is skipped and the next
+  // tick tries again, so a 429 never turns into a tight retry loop.
+  useEffect(() => {
+    if (!hasInProgress || pollTimedOut) return;
+
+    let isActive = true;
+    let inFlight = false;
+    let timer: number | undefined;
+    const query = toListQuery(applied, statusFilter, sortBy);
+
+    const poll = async () => {
+      timer = undefined;
+      if (!isActive || inFlight || document.hidden) return;
+      inFlight = true;
+
+      try {
+        const [apiDocs, nextCounts] = await Promise.all([
+          documentsService.listDocuments(query),
+          documentsService.getStatusCounts(query).catch(() => null),
+        ]);
+        if (!isActive) return;
+
+        const nextDocuments = apiDocs.map(toUiDocument);
+        const message = describeFinished(countFinished(rowsRef.current, nextDocuments));
+        if (message) showToast(message);
+
+        setSnapshot((prev) => ({
+          documents: nextDocuments,
+          counts: nextCounts ?? prev?.counts ?? null,
+          updatedAt: new Date(),
+        }));
+        refreshSidebarCounts();
+      } catch {
+        // Skipped: the next tick tries again.
+      } finally {
+        inFlight = false;
+      }
+
+      if (!isActive) return;
+      pollElapsedMsRef.current += POLL_INTERVAL_MS;
+      if (pollElapsedMsRef.current >= POLL_MAX_MS) {
+        setPollTimedOut(true);
+        return;
+      }
+      timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      void poll();
+    };
+
+    timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isActive = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [
+    hasInProgress,
+    pollTimedOut,
+    applied,
+    statusFilter,
+    sortBy,
+    showToast,
+    refreshSidebarCounts,
+  ]);
 
   // Preview document
   useEffect(() => {
@@ -480,6 +576,12 @@ export default function Documents() {
         {pageAlert && (
           <InlineAlert tone={pageAlert.tone} onDismiss={() => setPageAlert(null)}>
             {pageAlert.message}
+          </InlineAlert>
+        )}
+
+        {pollTimedOut && hasInProgress && (
+          <InlineAlert tone="info">
+            Some documents are still processing. Refresh the page to check again.
           </InlineAlert>
         )}
 

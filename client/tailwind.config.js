@@ -64,6 +64,7 @@ export default {
         popover: '40',
         modal: '50',
         confirm: '60',
+        toast: '70',
       },
     },
   },
