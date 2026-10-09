@@ -23,6 +23,13 @@ import {
   formatCountLabel,
 } from '../utils/format';
 import { downloadCsv } from '../utils/csv';
+import {
+  beginSave,
+  commonProjectName,
+  describeSaveResult,
+  type SaveResult,
+} from '../utils/saveFile';
+import { readRouteNotice } from '../utils/routeNotice';
 import { toUiDocument } from '../components/documents/documentConvert';
 import {
   buildDocumentsCsv,
@@ -58,7 +65,7 @@ interface ListSnapshot {
 }
 
 interface PageAlert {
-  tone: 'error' | 'warning';
+  tone: 'error' | 'warning' | 'success';
   message: string;
 }
 
@@ -91,10 +98,19 @@ export default function Documents() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
-  const [pageAlert, setPageAlert] = useState<PageAlert | null>(null);
+  const [initialNotice] = useState(() => readRouteNotice(location.state));
+  const [pageAlert, setPageAlert] = useState<PageAlert | null>(initialNotice);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Stops a reload showing the upload notice again
+  useEffect(() => {
+    if (initialNotice) {
+      navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist project in sessionStorage
   useEffect(() => {
@@ -314,9 +330,19 @@ export default function Documents() {
     setSelectedIds(new Set());
   };
 
+  const showSaveResult = (result: SaveResult) => {
+    const notice = describeSaveResult(result);
+    if (notice) setPageAlert(notice);
+  };
+
   const handleDownloadDocument = async (docId: string) => {
+    const target = beginSave();
     try {
-      await downloadDocument(docId);
+      const result = await downloadDocument(docId, {
+        projectName: rows.find((d) => d.id === docId)?.projectName,
+        target,
+      });
+      showSaveResult(result);
     } catch (err) {
       setPageAlert({
         tone: 'error',
@@ -335,11 +361,19 @@ export default function Documents() {
   };
 
   const handleExportShownCsv = () => {
-    downloadCsv(documentsCsvFileName(new Date()), buildDocumentsCsv(rows));
+    const target = beginSave();
+    void downloadCsv(documentsCsvFileName(new Date()), buildDocumentsCsv(rows), {
+      projectName: commonProjectName(rows.map((d) => d.projectName)),
+      target,
+    }).then(showSaveResult);
   };
 
   const handleExportSelectedCsv = () => {
-    downloadCsv(documentsCsvFileName(new Date()), buildDocumentsCsv(selectedRows));
+    const target = beginSave();
+    void downloadCsv(documentsCsvFileName(new Date()), buildDocumentsCsv(selectedRows), {
+      projectName: commonProjectName(selectedRows.map((d) => d.projectName)),
+      target,
+    }).then(showSaveResult);
   };
 
   const handleOpenZipExport = () => {
@@ -541,6 +575,8 @@ export default function Documents() {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         documentIds={Array.from(selectedIds)}
+        projectName={commonProjectName(selectedRows.map((d) => d.projectName))}
+        onSaved={showSaveResult}
       />
 
       <ConfirmDialog

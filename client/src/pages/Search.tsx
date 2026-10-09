@@ -32,6 +32,7 @@ import { SearchSnippet } from '../components/search/SearchSnippet.tsx';
 import { toUiDocument } from '../components/documents/documentConvert';
 import { useRangeSelection } from '../hooks/useRangeSelection';
 import { formatCount, formatCountLabel } from '../utils/format';
+import { beginSave, commonProjectName, describeSaveResult, type SaveResult } from '../utils/saveFile';
 
 type PendingDelete =
   | { kind: 'single'; documentId: string }
@@ -174,10 +175,20 @@ export default function Search() {
     setPreviewDocument(doc);
   };
 
+  const showSaveResult = (result: SaveResult) => {
+    const notice = describeSaveResult(result);
+    if (notice) setPageAlert(notice);
+  };
+
   const handleDownload = async (documentId: string) => {
+    const target = beginSave();
     setDownloadingId(documentId);
     try {
-      await downloadDocument(documentId);
+      const result = await downloadDocument(documentId, {
+        projectName: results.find((r) => r.documentId === documentId)?.projectName,
+        target,
+      });
+      showSaveResult(result);
     } catch (err) {
       setPageAlert({
         tone: 'error',
@@ -446,6 +457,12 @@ export default function Search() {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         documentIds={Array.from(selection.selectedIds)}
+        projectName={commonProjectName(
+          results
+            .filter((r) => selection.selectedIds.has(r.documentId))
+            .map((r) => r.projectName),
+        )}
+        onSaved={showSaveResult}
       />
 
       <ConfirmDialog

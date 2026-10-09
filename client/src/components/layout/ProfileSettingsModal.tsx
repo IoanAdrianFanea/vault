@@ -18,13 +18,14 @@ import {
 } from '../ui';
 import { meetsPasswordRules } from '../../utils/passwordRules';
 import { ROLE_BADGES } from '../../utils/userBadges';
+import { SaveLocationSettings } from './SaveLocationSettings';
 
 export interface ProfileSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type SettingsTab = 'profile' | 'security';
+type SettingsTab = 'profile' | 'security' | 'files';
 
 interface ProfileFormState {
   fullName: string;
@@ -246,7 +247,7 @@ export function ProfileSettingsModal({
       onClose={onClose}
       size="ml"
       title="Account settings"
-      description="Manage your profile and password."
+      description="Manage your profile, password and where files are saved."
       bodyClassName="px-4 pb-4 pt-0"
       footer={activeTab === 'profile' ? profileFooter : undefined}
     >
@@ -256,6 +257,7 @@ export function ProfileSettingsModal({
         items={[
           { value: 'profile', label: 'Profile' },
           { value: 'security', label: 'Security' },
+          { value: 'files', label: 'Files' },
         ]}
         value={activeTab}
         onChange={setActiveTab}
@@ -312,7 +314,7 @@ export function ProfileSettingsModal({
             </>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'security' ? (
         <div
           role="tabpanel"
           id={getTabPanelId('profile-settings', 'security')}
@@ -380,6 +382,15 @@ export function ProfileSettingsModal({
               To delete your account, contact an administrator.
             </p>
           </section>
+        </div>
+      ) : (
+        <div
+          role="tabpanel"
+          id={getTabPanelId('profile-settings', 'files')}
+          aria-labelledby={getTabId('profile-settings', 'files')}
+          className="space-y-4 pt-4"
+        >
+          <SaveLocationSettings />
         </div>
       )}
     </Modal>

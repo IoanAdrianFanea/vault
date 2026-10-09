@@ -246,6 +246,7 @@ export interface SearchResult {
   documentId: string;
   filename: string;
   snippet: string;
+  projectName: string;
 }
 
 export interface DocumentText {

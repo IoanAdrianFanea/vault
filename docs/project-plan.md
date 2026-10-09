@@ -6,7 +6,7 @@ A multi-user document indexing and retrieval tool for construction operations te
 
 ## Current Position
 
-**Phases 2, 3, and 4 are complete. Phase 5 is next.**
+**Phases 2, 3, 4 and 4.5 are complete. Phase 5 is next.**
 
 All four Phase 2 workstreams are built and wired end to end:
 
@@ -212,7 +212,7 @@ Status: **complete**
 
 ## Phase 4.5 – Pilot readiness
 
-Status: **in progress** (Groups A–C complete)
+Status: **complete** (Groups A–E)
 
 Hardening, deployment automation, security, and operator tooling for the initial pilot deployment.
 
@@ -232,9 +232,9 @@ Hardening, deployment automation, security, and operator tooling for the initial
 | Migrations at start and restore hook | ✅ done | Startup runs restore hook before `prisma migrate deploy` and server boot |
 | Database backups | ✅ done | Scheduled nightly backups at 02:30 UTC, startup backup if stale (>24h), retention pruning (`BACKUP_KEEP`) |
 | Deploy guide | ✅ done | Operator guide covering Render configuration, backups, disaster recovery, and proxy setup in `docs/deploy.md` |
-| Silent session refresh | ⏳ planned | Group D |
-| Admin guard UI | ⏳ planned | Group D |
-| Save to folder | ⏳ planned | Group E |
+| Silent session refresh | ✅ done | Group D |
+| Admin guard UI | ✅ done | Group D |
+| Save to folder | ✅ done | Group E |
 
 ---
 

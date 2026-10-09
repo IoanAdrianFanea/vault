@@ -26,6 +26,7 @@ import {
   formatDate,
   formatFileSize,
 } from '../../utils/format';
+import { beginSave, describeSaveResult } from '../../utils/saveFile';
 
 const OPERATION_LABELS: Record<string, string> = {
   ARCHIVING: 'Archiving…',
@@ -68,10 +69,12 @@ export default function AdminArchive() {
   }, []);
 
   const handleDownload = async (project: ArchivedProject) => {
+    const target = beginSave();
     setDownloadingId(project.id);
     setPageAlert(null);
     try {
-      await downloadProjectArchive(project.id, project.name);
+      const result = await downloadProjectArchive(project.id, project.name, { target });
+      setPageAlert(describeSaveResult(result));
     } catch (err) {
       setPageAlert({
         tone: 'error',

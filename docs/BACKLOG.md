@@ -152,9 +152,9 @@ There's no "forgot password" flow. The link was removed from the sign-in page be
 
 ---
 
-## Project and Uploader on GET /documents/:id
+## Uploader on GET /documents/:id
 
-The endpoint returns neither `projectName` nor `uploadedByEmail`, so the Search drawer can't show them (they're only on list rows).
+The endpoint returns `projectName` but not `uploadedByEmail`, so the Search drawer can't show the uploader (it's only on list rows).
 
 ---
 

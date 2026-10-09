@@ -1,4 +1,5 @@
 import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
+import { saveFile, type SaveResult, type SaveTarget } from '../utils/saveFile';
 import { apiFetch } from './http';
 
 export interface DocumentBlobPayload {
@@ -32,17 +33,13 @@ export async function getDocumentBlob(documentId: string): Promise<DocumentBlobP
 /**
  * Download a single document
  */
-export async function downloadDocument(documentId: string): Promise<void> {
+export async function downloadDocument(
+  documentId: string,
+  options: { projectName?: string; target?: Promise<SaveTarget> } = {},
+): Promise<SaveResult> {
   try {
     const { blob, filename } = await getDocumentBlob(documentId);
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    return await saveFile(blob, filename, options);
   } catch (error) {
     throw error instanceof Error ? error : new Error('Download failed');
   }
@@ -51,7 +48,10 @@ export async function downloadDocument(documentId: string): Promise<void> {
 /**
  * Export multiple documents as ZIP
  */
-export async function exportDocuments(documentIds: string[]): Promise<void> {
+export async function exportDocuments(
+  documentIds: string[],
+  options: { projectName?: string; target?: Promise<SaveTarget> } = {},
+): Promise<SaveResult> {
   try {
     const response = await apiFetch('/exports', {
       method: 'POST',
@@ -73,16 +73,8 @@ export async function exportDocuments(documentIds: string[]): Promise<void> {
       'documents-export.zip',
     );
 
-    // Download the file
     const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    return await saveFile(blob, filename, options);
   } catch (error) {
     throw error instanceof Error ? error : new Error('Export failed');
   }

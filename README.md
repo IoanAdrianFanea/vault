@@ -19,6 +19,7 @@ Built for shared company use — documents are organised by project, and access 
 - Users can delete documents in their own projects; admins can delete anywhere and have unrestricted upload access
 - Deletions are soft: every deletion is logged with actor, project and timestamp, files are recoverable for 30 days, and the log survives permanent deletion
 - Selected documents can be downloaded individually or exported as a ZIP
+- In Chrome or Edge, downloads and copies of uploads can be saved straight into a chosen folder on the computer, one folder per project
 
 ---
 

@@ -4,6 +4,7 @@ import type { FilterDefinition } from '../../api/filters';
 import { documentsService } from '../../api/documents';
 import { downloadDocument } from '../../api/exports';
 import { formatDateTime, formatIsoDate } from '../../utils/format';
+import { beginSave, describeSaveResult } from '../../utils/saveFile';
 import { sortFilterDefinitions } from './documentFilters';
 import {
   Button,
@@ -43,6 +44,11 @@ export function DocumentDrawer({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<{
     documentId: string;
+    message: string;
+  } | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState<{
+    documentId: string;
+    tone: 'success' | 'warning';
     message: string;
   } | null>(null);
   const [textState, setTextState] = useState<TextState>({ status: 'loading' });
@@ -88,11 +94,18 @@ export function DocumentDrawer({
   }, [docId, docStatus]);
 
   const handleDownload = async () => {
+    const target = beginSave();
     if (!readyDocument) return;
     setDownloadError(null);
+    setDownloadNotice(null);
     setIsDownloading(true);
     try {
-      await downloadDocument(readyDocument.id);
+      const result = await downloadDocument(readyDocument.id, {
+        projectName: readyDocument.projectName,
+        target,
+      });
+      const notice = describeSaveResult(result);
+      if (notice) setDownloadNotice({ documentId: readyDocument.id, ...notice });
     } catch (error) {
       setDownloadError({
         documentId: readyDocument.id,
@@ -169,6 +182,9 @@ export function DocumentDrawer({
       <div className="space-y-4">
         {downloadError && downloadError.documentId === document.id && (
           <InlineAlert tone="error">{downloadError.message}</InlineAlert>
+        )}
+        {downloadNotice && downloadNotice.documentId === document.id && (
+          <InlineAlert tone={downloadNotice.tone}>{downloadNotice.message}</InlineAlert>
         )}
 
         <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5 text-body">

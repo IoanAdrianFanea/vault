@@ -12,6 +12,7 @@ import {
   StatusBadge,
 } from '../ui';
 import { formatIsoDate } from '../../utils/format';
+import { beginSave, describeSaveResult } from '../../utils/saveFile';
 import { sortFilterDefinitions } from './documentFilters';
 
 export interface DocumentPreviewModalProps {
@@ -34,6 +35,10 @@ export function DocumentPreviewModal({
   const textHeadingId = useId();
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string>('');
+  const [downloadNotice, setDownloadNotice] = useState<{
+    tone: 'success' | 'warning';
+    message: string;
+  } | null>(null);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -150,10 +155,16 @@ export function DocumentPreviewModal({
   }, [document.id, document.status]);
 
   const handleDownload = async () => {
+    const target = beginSave();
     setIsDownloading(true);
     setDownloadError('');
+    setDownloadNotice(null);
     try {
-      await downloadDocument(document.id);
+      const result = await downloadDocument(document.id, {
+        projectName: document.projectName,
+        target,
+      });
+      setDownloadNotice(describeSaveResult(result));
     } catch (error) {
       setDownloadError(
         error instanceof Error ? error.message : 'Failed to download document',
@@ -203,6 +214,15 @@ export function DocumentPreviewModal({
           className="mb-3"
         >
           {downloadError}
+        </InlineAlert>
+      )}
+      {downloadNotice && (
+        <InlineAlert
+          tone={downloadNotice.tone}
+          onDismiss={() => setDownloadNotice(null)}
+          className="mb-3"
+        >
+          {downloadNotice.message}
         </InlineAlert>
       )}
 

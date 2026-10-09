@@ -1,4 +1,5 @@
 import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
+import { saveFile, type SaveResult, type SaveTarget } from '../utils/saveFile';
 import { apiFetch, readErrorMessage } from './http';
 
 export type ArchiveOperation = 'ARCHIVING' | 'UNARCHIVING' | 'DELETING';
@@ -72,7 +73,8 @@ export async function unarchiveProject(id: string): Promise<UnarchiveProjectResu
 export async function downloadProjectArchive(
   id: string,
   fallbackName: string,
-): Promise<void> {
+  options: { target?: Promise<SaveTarget> } = {},
+): Promise<SaveResult> {
   const response = await apiFetch(`/archive/${encodeURIComponent(id)}/download`, {
     method: 'GET',
   });
@@ -88,14 +90,7 @@ export async function downloadProjectArchive(
   );
 
   const blob = await response.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(url);
+  return saveFile(blob, filename, { target: options.target });
 }
 
 export async function deleteArchivedProject(id: string): Promise<void> {

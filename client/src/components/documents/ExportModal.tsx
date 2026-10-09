@@ -2,14 +2,23 @@ import { useState } from 'react';
 import { exportDocuments } from '../../api/exports';
 import { Button, InlineAlert, Modal } from '../ui';
 import { formatCountLabel } from '../../utils/format';
+import { beginSave, type SaveResult } from '../../utils/saveFile';
 
 export interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   documentIds: string[];
+  projectName?: string;
+  onSaved?: (result: SaveResult) => void;
 }
 
-export function ExportModal({ isOpen, onClose, documentIds }: ExportModalProps) {
+export function ExportModal({
+  isOpen,
+  onClose,
+  documentIds,
+  projectName,
+  onSaved,
+}: ExportModalProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -19,9 +28,11 @@ export function ExportModal({ isOpen, onClose, documentIds }: ExportModalProps) 
   };
 
   const handleExport = async () => {
+    const target = beginSave();
     setIsExporting(true);
     try {
-      await exportDocuments(documentIds);
+      const result = await exportDocuments(documentIds, { projectName, target });
+      onSaved?.(result);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to export documents');

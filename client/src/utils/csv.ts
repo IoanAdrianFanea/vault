@@ -1,3 +1,5 @@
+import { saveFile, type SaveResult, type SaveTarget } from './saveFile';
+
 export interface CsvColumn<T> {
   header: string;
   value: (row: T) => string | number | null | undefined;
@@ -29,14 +31,10 @@ export function toCsv<T>(rows: T[], columns: CsvColumn<T>[]): string {
   return '\uFEFF' + content;
 }
 
-export function downloadCsv(fileName: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(url);
+export function downloadCsv(
+  fileName: string,
+  content: string,
+  options: { projectName?: string; target?: Promise<SaveTarget> } = {},
+): Promise<SaveResult> {
+  return saveFile(new Blob([content], { type: 'text/csv;charset=utf-8' }), fileName, options);
 }

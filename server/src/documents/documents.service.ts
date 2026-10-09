@@ -275,6 +275,7 @@ export class DocumentsService {
         }),
       },
       include: {
+        project: { select: { name: true } },
         text: {
           select: {
             extractedAt: true,
@@ -304,6 +305,7 @@ export class DocumentsService {
 
     return {
       id: document.id,
+      projectName: document.project.name,
       originalFilename: document.originalFilename,
       mimeType: document.mimeType,
       sizeBytes: document.sizeBytes,
@@ -635,6 +637,7 @@ export class DocumentsService {
             extractedText: true,
           },
         },
+        project: { select: { name: true } },
       },
       orderBy: { uploadedAt: 'desc' },
     });
@@ -675,6 +678,7 @@ export class DocumentsService {
         documentId: doc.id,
         filename: doc.originalFilename,
         snippet,
+        projectName: doc.project.name,
       };
     });
 

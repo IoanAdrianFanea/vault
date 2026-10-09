@@ -30,6 +30,7 @@ import {
   formatFileSize,
 } from '../utils/format';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../utils/uploadLimits';
+import { beginSave, saveFile } from '../utils/saveFile';
 
 export interface UploadQueueItem {
   id: string;
@@ -193,6 +194,7 @@ export default function Upload() {
   };
 
   const handleUploadAll = async () => {
+    const saveTarget = beginSave();
     const runItems = queue.filter(
       (item) => item.status === 'waiting' || item.status === 'failed',
     );
@@ -200,6 +202,7 @@ export default function Upload() {
       return;
     }
     const runIds = runItems.map((item) => item.id);
+    const projectName = projects.find((p) => p.id === selectedProjectId)?.name;
 
     setQueue((prev) =>
       prev.map((item) =>
@@ -212,6 +215,9 @@ export default function Upload() {
     setRunResult(null);
 
     let failedCount = 0;
+    let copiesSaved = 0;
+    let copiesFailed = 0;
+    let savedTo = '';
 
     for (const item of runItems) {
       setQueue((prev) =>
@@ -231,6 +237,18 @@ export default function Upload() {
             f.id === item.id ? { ...f, status: 'uploaded' } : f,
           ),
         );
+        const copy = await saveFile(item.file, item.file.name, {
+          projectName,
+          target: saveTarget,
+          fallbackToDownload: false,
+        });
+        if (copy.savedTo) {
+          copiesSaved++;
+          savedTo = copy.savedTo;
+        }
+        if (copy.warning) {
+          copiesFailed++;
+        }
       } catch (err) {
         failedCount++;
         const errorMessage =
@@ -246,18 +264,24 @@ export default function Upload() {
     }
 
     if (failedCount === 0) {
-      setRunResult({
-        tone: 'success',
-        message: `${formatCountLabel(runIds.length, 'file', 'files')} uploaded`,
-      });
+      let tone: 'success' | 'warning' = 'success';
+      let message = `${formatCountLabel(runIds.length, 'file', 'files')} uploaded`;
+      if (copiesFailed > 0) {
+        tone = 'warning';
+        message += `, but ${formatCountLabel(copiesFailed, 'copy', 'copies')} couldn't be saved to your folder.`;
+      } else if (copiesSaved > 0) {
+        message += `. Copies saved to ${savedTo}.`;
+      }
+      setRunResult({ tone, message });
       redirectTimerRef.current = window.setTimeout(() => {
-        navigate('/documents');
+        navigate('/documents', { state: { notice: { tone, message } } });
       }, 1500);
     } else {
-      setRunResult({
-        tone: 'warning',
-        message: `${failedCount} of ${runIds.length} files couldn't be uploaded. Upload them again or remove them.`,
-      });
+      let message = `${failedCount} of ${runIds.length} files couldn't be uploaded. Upload them again or remove them.`;
+      if (copiesFailed > 0) {
+        message += ` ${formatCountLabel(copiesFailed, 'copy', 'copies')} couldn't be saved to your folder.`;
+      }
+      setRunResult({ tone: 'warning', message });
     }
 
     setIsUploading(false);
