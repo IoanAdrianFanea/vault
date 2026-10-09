@@ -1,3 +1,9 @@
+/*
+Barrel file that re-exports the shared UI components, their types and the style
+helpers, so features can import them from one place.
+*/
+
+
 export { Avatar } from './Avatar';
 export { Badge } from './Badge';
 export type { BadgeTone } from './Badge';

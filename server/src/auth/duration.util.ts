@@ -1,3 +1,9 @@
+/*
+Converts duration strings such as '15m' or '7d' into milliseconds. Used for
+refresh-token expiry and the refresh cookie's max age.
+*/
+
+
 export function parseDurationMs(value: string): number {
   const match = value.match(/^(\d+)([smhd])$/);
   if (!match) {

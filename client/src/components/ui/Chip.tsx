@@ -1,3 +1,8 @@
+/*
+Removable label-and-value chip, used to show an applied filter.
+*/
+
+
 export interface ChipProps {
   label: string;
   value: string;

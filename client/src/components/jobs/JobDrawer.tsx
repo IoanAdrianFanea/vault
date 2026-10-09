@@ -1,3 +1,10 @@
+/*
+Side drawer showing one job's status, details and files, with download and
+delete controls. Download and delete are still stubs until the backend has job
+endpoints.
+*/
+
+
 import { useState } from 'react';
 import type { Job } from '../../types';
 import {

@@ -1,3 +1,9 @@
+/*
+Admin tab listing projects, with search and actions to create, rename, manage
+members, archive and delete them.
+*/
+
+
 import { useCallback, useEffect, useState } from 'react';
 import { getProjects, type AdminProject } from '../../api/projects';
 import { RenameProjectModal } from '../../components/admin/RenameProjectModal';

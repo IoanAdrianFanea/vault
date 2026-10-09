@@ -1,3 +1,9 @@
+/*
+HTTP endpoints for custom filter fields. Any signed-in user can list them;
+only admins can create, update or delete them.
+*/
+
+
 import {
   Body,
   Controller,

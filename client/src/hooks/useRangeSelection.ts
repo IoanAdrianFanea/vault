@@ -1,3 +1,10 @@
+/*
+Hook that manages row selection for tables, including shift-click range
+selection over the visible rows. Selection is cleared whenever the reset key
+changes.
+*/
+
+
 import { useCallback, useState } from 'react';
 
 export interface RangeSelection {

@@ -1,3 +1,9 @@
+/*
+Button that opens a popover list of actions, with arrow-key navigation and
+optional dividers. Used for the export menu.
+*/
+
+
 import { Fragment, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from './Button';
 import type { ButtonSize } from './buttonStyles';

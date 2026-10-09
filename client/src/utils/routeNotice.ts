@@ -1,3 +1,9 @@
+/*
+Reads a success or warning notice passed between pages through router navigation
+state, ignoring anything malformed.
+*/
+
+
 export interface RouteNotice {
   tone: 'success' | 'warning';
   message: string;

@@ -1,3 +1,9 @@
+/*
+Sortable, selectable table of documents with per-row download and retry actions.
+Sort changes and selection are reported back to the documents page.
+*/
+
+
 import type { Document } from '../../types';
 import {
   Checkbox,

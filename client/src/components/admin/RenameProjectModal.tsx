@@ -1,3 +1,8 @@
+/*
+Modal form for renaming a project, used from the admin projects page.
+*/
+
+
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { renameProject } from '../../api/projects';
 import { Button, FormField, Input, Modal } from '../ui';

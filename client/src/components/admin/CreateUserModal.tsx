@@ -1,3 +1,9 @@
+/*
+Modal form where an admin creates a user with a name, email, initial password
+and role. The new user is asked to set their own password at first sign-in.
+*/
+
+
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createUser, type UserSummary } from '../../api/users';
 import {

@@ -1,3 +1,10 @@
+/*
+Sign-in page. It skips straight to the app when a session already exists, sends
+users with a temporary password to change it, and only follows safe internal
+redirect targets.
+*/
+
+
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authService } from '../api/auth';

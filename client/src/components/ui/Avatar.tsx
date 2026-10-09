@@ -1,3 +1,9 @@
+/*
+Circular avatar showing a user's initials, falling back to the email's first
+letter or a generic icon.
+*/
+
+
 export interface AvatarProps {
   fullName?: string | null;
   email?: string | null;

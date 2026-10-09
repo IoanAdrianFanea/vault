@@ -1,3 +1,9 @@
+/*
+Renders a search result snippet with the matched terms highlighted. Used by the
+search page.
+*/
+
+
 import { parseSnippet } from './searchSnippet';
 
 export interface SearchSnippetProps {

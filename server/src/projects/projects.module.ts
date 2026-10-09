@@ -1,3 +1,9 @@
+/*
+Nest module that wires the projects controller and service to Prisma and blob
+storage.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';

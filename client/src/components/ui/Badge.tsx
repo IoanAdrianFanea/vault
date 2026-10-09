@@ -1,3 +1,9 @@
+/*
+Small coloured status label with an optional dot, in four tones. The base for
+the document and job status badges.
+*/
+
+
 import type { ReactNode } from 'react';
 
 export type BadgeTone = 'teal' | 'amber' | 'red' | 'slate';

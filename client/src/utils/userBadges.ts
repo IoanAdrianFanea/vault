@@ -1,3 +1,9 @@
+/*
+Badge labels and colours for user roles and account statuses, used by the admin
+user tables and the member picker.
+*/
+
+
 import type { BadgeTone } from '../components/ui';
 import type { AccountStatus } from '../api/users';
 

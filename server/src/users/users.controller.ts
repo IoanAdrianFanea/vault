@@ -1,3 +1,10 @@
+/*
+HTTP endpoints for user management: admins list, search, create, edit,
+approve or reject, re-role and delete users. Non-admins can only fetch their
+own profile.
+*/
+
+
 import { CreateUserDto } from './dto/CreateUser.dto';
 import { SetUserDto } from './dto/SetUser.dto';
 import { UpdateAccountStatusDto } from './dto/UpdateAccountStatus.dto';

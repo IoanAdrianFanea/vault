@@ -1,3 +1,10 @@
+/*
+Ambient type declarations for the File System Access API features the TypeScript
+DOM library lacks: directory picking and permission queries. Used when saving
+files to a chosen folder.
+*/
+
+
 type FileSystemPermissionMode = 'read' | 'readwrite';
 
 interface FileSystemHandlePermissionDescriptor {

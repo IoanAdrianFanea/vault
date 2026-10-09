@@ -1,3 +1,9 @@
+/*
+Centred placeholder with an icon, title, description and optional action, shown
+when a list has nothing to display.
+*/
+
+
 import type { ReactNode } from 'react';
 
 export interface EmptyStateProps {

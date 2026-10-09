@@ -1,3 +1,10 @@
+/*
+Summary strip above the documents list showing the file count, total size, last
+update time and indexing progress. Failed documents link to a failed-only
+filter.
+*/
+
+
 import type { DocumentStatusCounts } from '../../api/documents';
 import { SummaryBar, TextAction } from '../ui';
 import {

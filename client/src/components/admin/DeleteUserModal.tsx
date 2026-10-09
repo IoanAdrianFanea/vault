@@ -1,3 +1,8 @@
+/*
+Confirmation dialog for deleting a user account. Used from the admin users page.
+*/
+
+
 import { useEffect, useState } from 'react';
 import { deleteUser, type UserSummary } from '../../api/users';
 import { ConfirmDialog, InlineAlert } from '../ui';

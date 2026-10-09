@@ -1,3 +1,9 @@
+/*
+Class definitions behind TextAction, also used to style router links as text
+actions.
+*/
+
+
 export type TextActionTone = 'accent' | 'muted' | 'danger';
 export type TextActionVariant = 'label' | 'inline';
 

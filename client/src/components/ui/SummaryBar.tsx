@@ -1,3 +1,9 @@
+/*
+Slim strip of dot-separated summary figures with an optional right-hand aside,
+shown above lists.
+*/
+
+
 import { Fragment, type ReactNode } from 'react';
 
 export interface SummaryBarProps {

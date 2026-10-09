@@ -1,10 +1,12 @@
+/*
+One-off, idempotent command-line script that moves document files from the
+legacy per-user folders into the per-project active/ and deleted/ areas and
+updates their storage keys. Supports --dry-run, and removes the emptied
+legacy folders afterwards.
+*/
 // Direct fs usage allowed: storage layout migration script (RQ7).
-/**
- * One-off, idempotent migration script to transition storage layout from
- * legacy {userId}/... to active/{projectId}/... and deleted/{projectId}/...
- *
- * NOTE: The API server MUST be stopped while this migration script runs.
- */
+// NOTE: The API server MUST be stopped while this migration script runs.
+
 
 import { Module, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';

@@ -1,3 +1,10 @@
+/*
+Upload page: choose a project, fill in the custom filter fields, add PDF, JPG or
+PNG files by dragging or browsing, and upload them one by one. It rejects wrong
+or oversized files up front and can save a local copy of each upload.
+*/
+
+
 import {
   useState,
   useRef,

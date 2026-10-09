@@ -1,3 +1,9 @@
+/*
+Display order, labels and colours for each document status, shared by the status
+badge, sidebar filters and summary bar.
+*/
+
+
 import type { DocumentStatus } from '../../types';
 import type { BadgeTone } from './Badge';
 

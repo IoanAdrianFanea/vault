@@ -1,3 +1,9 @@
+/*
+Converts a document from the API shape into the display shape the document list
+and drawers render, with the size and date already formatted.
+*/
+
+
 import type { Document } from '../../types';
 import type { Document as ApiDocument } from '../../api/documents';
 import { formatDateTime, formatFileSize } from '../../utils/format';

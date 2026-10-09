@@ -1,3 +1,10 @@
+/*
+Confirmation modal for archiving a project. It shows progress while the zip is
+built, then lists any files that were missing from storage and so left out of
+the archive.
+*/
+
+
 import { useEffect, useState } from 'react';
 import { archiveProject, type MissingArchiveDocument } from '../../api/archive';
 import { Button, InlineAlert, Modal, Spinner } from '../ui';

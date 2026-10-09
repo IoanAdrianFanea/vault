@@ -1,3 +1,9 @@
+/*
+Square icon-only button that takes an accessible label, which also acts as its
+tooltip.
+*/
+
+
 import type { ButtonHTMLAttributes } from 'react';
 import { iconButtonClassName, type ButtonSize } from './buttonStyles';
 

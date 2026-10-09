@@ -1,3 +1,8 @@
+/*
+Request body for an admin editing a user's name, email or temporary password.
+*/
+
+
 import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { normalizeEmail } from '../../common/email.util';

@@ -1,3 +1,9 @@
+/*
+Account settings modal with tabs for profile details, password change and file
+save location. It also holds the sign-out button.
+*/
+
+
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, type UpdateMePayload } from '../../api/auth';

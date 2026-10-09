@@ -1,3 +1,10 @@
+/*
+Admin tab for managing users: search and filter by role and status, create,
+edit, change role and delete, with bulk delete. Protects the signed-in admin and
+the last active admin from removal.
+*/
+
+
 import { useEffect, useMemo, useState } from 'react';
 import {
   findAllUsers,

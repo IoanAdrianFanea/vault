@@ -1,3 +1,10 @@
+/*
+Passport strategy that verifies the Bearer access token and loads its user
+onto req.user. Rejects tokens for users that no longer exist or are no longer
+active.
+*/
+
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';

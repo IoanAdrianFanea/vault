@@ -1,3 +1,10 @@
+/*
+Admin-only HTTP endpoints for project archives: list archived projects,
+archive, restore, stream the zip for download and delete. Delegates all the
+work to ArchiveService.
+*/
+
+
 import {
   BadRequestException,
   Controller,

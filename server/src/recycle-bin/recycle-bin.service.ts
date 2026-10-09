@@ -1,3 +1,12 @@
+/*
+Admin-only recycle bin logic: list soft-deleted documents and projects,
+restore them (archived projects go back to their zip) and delete them
+permanently, on request or once the retention window expires. Rows are
+claimed before files are moved or removed, so restores and purges can't
+collide.
+*/
+
+
 import {
   BadRequestException,
   ConflictException,

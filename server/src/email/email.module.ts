@@ -1,3 +1,8 @@
+/*
+Nest module that provides and exports the email service.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { EmailService } from './email.service';
 

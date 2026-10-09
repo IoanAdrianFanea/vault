@@ -1,3 +1,10 @@
+/*
+User database operations for authentication and admin user management. Stops
+admins changing or deleting their own account or removing the last active
+admin, and revokes sessions when an account is deactivated.
+*/
+
+
 import {
   Injectable,
   ConflictException,

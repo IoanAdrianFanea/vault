@@ -1,3 +1,10 @@
+/*
+Detects whether an uploaded file really is a PDF, JPEG or PNG from its magic
+bytes, so a renamed file can't pass as a supported type. Used by the upload
+endpoint.
+*/
+
+
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
 const PDF_MAGIC = '%PDF-';

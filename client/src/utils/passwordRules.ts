@@ -1,3 +1,10 @@
+/*
+The password rules the client checks and displays, mirroring the server's
+password policy. Used by the password checklist and the forms that set a
+password.
+*/
+
+
 export interface PasswordRule {
   label: string;
   test: (password: string) => boolean;

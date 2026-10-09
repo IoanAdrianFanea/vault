@@ -1,9 +1,9 @@
-/**
- * Soft delete / recycle bin retention rules.
- * Shared by RecycleBinService (restore, purge) and the scheduled purge task
- * so the window is defined in exactly one place.
- * Storage key rules now live in storage/storage-keys.ts.
- */
+/*
+Recycle bin retention period and the date helpers built on it. Shared by
+RecycleBinService and the nightly purge task so the window is defined in one
+place.
+*/
+
 
 /** Days a soft-deleted document remains restorable before permanent deletion. */
 export const DELETION_RETENTION_DAYS = 30;

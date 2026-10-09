@@ -1,3 +1,10 @@
+/*
+Client for the admin archive endpoints: list archived projects, archive and
+restore a project, delete an archive and download its zip. Downloads are handed
+to the shared save helper.
+*/
+
+
 import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
 import { saveFile, type SaveResult, type SaveTarget } from '../utils/saveFile';
 import { apiFetch, readErrorMessage } from './http';

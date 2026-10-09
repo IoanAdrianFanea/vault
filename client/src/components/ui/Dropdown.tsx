@@ -1,3 +1,9 @@
+/*
+Labelled single-choice dropdown with keyboard navigation, optional dividers and
+a footer slot. Used for project and sort selection.
+*/
+
+
 import {
   Fragment,
   useEffect,

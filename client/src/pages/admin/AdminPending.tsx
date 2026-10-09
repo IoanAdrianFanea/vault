@@ -1,3 +1,9 @@
+/*
+Admin tab for account requests. Switch between pending and rejected users to
+approve, reject or delete them, one at a time or in bulk.
+*/
+
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   getPendingUsers,

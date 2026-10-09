@@ -1,3 +1,8 @@
+/*
+Request body for a zip export: a non-empty list of document IDs.
+*/
+
+
 import { IsArray, IsString, ArrayMinSize } from 'class-validator';
 
 export class CreateExportDto {

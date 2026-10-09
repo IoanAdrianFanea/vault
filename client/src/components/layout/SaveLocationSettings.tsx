@@ -1,3 +1,10 @@
+/*
+Settings panel for choosing the folder where downloaded and uploaded files are
+saved. It is disabled, with an explanatory note, in browsers that lack the File
+System Access API.
+*/
+
+
 import { useState } from 'react';
 import {
   chooseSaveFolder,

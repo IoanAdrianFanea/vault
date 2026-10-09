@@ -1,3 +1,9 @@
+/*
+Route guard that requires a valid access token via the Passport JWT strategy.
+Applied to every protected controller.
+*/
+
+
 import { Injectable, ExecutionContext } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 

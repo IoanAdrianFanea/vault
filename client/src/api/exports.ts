@@ -1,3 +1,10 @@
+/*
+Client for downloading one document or exporting several as a zip. Reads the
+filename from the response headers and passes the file to the shared save
+helper.
+*/
+
+
 import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
 import { saveFile, type SaveResult, type SaveTarget } from '../utils/saveFile';
 import { apiFetch } from './http';

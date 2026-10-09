@@ -1,3 +1,10 @@
+/*
+Side drawer showing one document's details: status, custom field values, a text
+preview, and download, preview and delete actions. It loads the extracted text
+itself once the document is processed.
+*/
+
+
 import { useEffect, useState } from 'react';
 import type { Document } from '../../types';
 import type { FilterDefinition } from '../../api/filters';

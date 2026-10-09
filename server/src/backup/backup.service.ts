@@ -1,4 +1,11 @@
+/*
+Takes SQLite database backups with VACUUM INTO, nightly at 02:30 and at
+startup when the newest backup is over 24 hours old. Keeps only the newest
+BACKUP_KEEP files in the backups folder.
+*/
 // Direct fs usage allowed: database backup service (RQ7).
+
+
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';

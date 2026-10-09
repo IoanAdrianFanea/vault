@@ -1,3 +1,8 @@
+/*
+Page title block with an optional description, back link and action buttons.
+*/
+
+
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { textActionClassName } from './textActionStyles';

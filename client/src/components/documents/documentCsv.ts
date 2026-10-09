@@ -1,3 +1,9 @@
+/*
+Builds the CSV export of the documents list: the column set, the file contents
+and a dated file name. Used by the documents page bulk and toolbar exports.
+*/
+
+
 import type { Document } from '../../types';
 import type { CsvColumn } from '../../utils/csv';
 import { toCsv } from '../../utils/csv';

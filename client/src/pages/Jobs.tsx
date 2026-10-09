@@ -1,3 +1,9 @@
+/*
+Preview page for background jobs, showing sample data in a table with a detail
+drawer. It is a placeholder until the backend has job processing.
+*/
+
+
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Job } from '../types';
 import { JobsTable } from '../components/jobs/JobsTable';

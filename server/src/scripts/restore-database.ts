@@ -1,3 +1,10 @@
+/*
+Command-line entry point run before the server starts on Render, restoring
+the database from a backup if one was requested. Exits with an error if the
+restore fails.
+*/
+
+
 import 'dotenv/config';
 import { Logger } from '@nestjs/common';
 import { restoreDatabaseIfRequested } from '../backup/restore-database';

@@ -1,3 +1,9 @@
+/*
+Confirmation modal for downloading the selected documents as one ZIP. It starts
+the save as soon as the user clicks, so browsers still allow the folder picker.
+*/
+
+
 import { useState } from 'react';
 import { exportDocuments } from '../../api/exports';
 import { Button, InlineAlert, Modal } from '../ui';

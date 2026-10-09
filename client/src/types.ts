@@ -1,3 +1,10 @@
+/*
+Shared front-end types for documents and jobs, used by the document list,
+drawers and jobs views. The document shape here is the view model the UI
+renders, which differs from the raw API type.
+*/
+
+
 export type DocumentStatus = 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
 export type FilterType = 'TEXT' | 'NUMBER' | 'DATE';
 

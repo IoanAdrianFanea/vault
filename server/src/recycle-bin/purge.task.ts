@@ -1,3 +1,9 @@
+/*
+Nightly 03:00 job that permanently deletes projects and documents past the
+retention window, then prunes expired and revoked refresh tokens.
+*/
+
+
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { RecycleBinService } from './recycle-bin.service';

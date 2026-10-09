@@ -1,3 +1,8 @@
+/*
+Live checklist showing which password rules the typed password meets.
+*/
+
+
 import { PASSWORD_RULES } from '../../utils/passwordRules';
 
 export interface PasswordChecklistProps {

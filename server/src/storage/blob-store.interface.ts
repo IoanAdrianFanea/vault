@@ -1,3 +1,10 @@
+/*
+The storage abstraction every service uses for file access, plus its
+BLOB_STORE injection token. Keeps services independent of where files are
+actually kept.
+*/
+
+
 import { Readable } from 'stream';
 
 export interface SavedBlob {

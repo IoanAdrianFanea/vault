@@ -1,3 +1,10 @@
+/*
+Client for the authentication and own-profile endpoints: register, log in and
+out, fetch or update the current user, change password and verify an email
+address. Exposes them as the authService object.
+*/
+
+
 import { apiFetch } from './http';
 
 // Auth API response types

@@ -1,3 +1,10 @@
+/*
+Multer interceptor for the single 'file' upload field, capped at
+MAX_UPLOAD_MB. Turns an oversized file into a 413 with a readable size limit
+message.
+*/
+
+
 import {
   Injectable,
   NestInterceptor,

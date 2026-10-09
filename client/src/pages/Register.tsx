@@ -1,3 +1,9 @@
+/*
+Access request page where a new user signs up with a name, email and password.
+It then explains that they must verify their email and wait for admin approval.
+*/
+
+
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { authService } from '../api/auth';

@@ -1,3 +1,8 @@
+/*
+Text-only action button in accent, muted or danger tones.
+*/
+
+
 import type { ButtonHTMLAttributes } from 'react';
 import {
   textActionClassName,

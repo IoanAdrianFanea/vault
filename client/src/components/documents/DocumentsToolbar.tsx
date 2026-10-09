@@ -1,3 +1,10 @@
+/*
+Toolbar for the documents page with the project selector, filter popover, sort
+control, result count and export menu. Admins also get a shortcut to manage
+projects.
+*/
+
+
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Project } from '../../api/projects';

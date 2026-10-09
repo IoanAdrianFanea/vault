@@ -1,3 +1,10 @@
+/*
+Layout for the /admin section: page heading, tab bar with the pending-approvals
+count, and an outlet for the active admin page. Shares a refresh callback for
+that count with the pages through the outlet context.
+*/
+
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { getPendingUsers } from '../../api/users';

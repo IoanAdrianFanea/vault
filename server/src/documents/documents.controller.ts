@@ -1,3 +1,11 @@
+/*
+Authenticated HTTP endpoints for documents: upload, list, status counts,
+search, extracted text, download and single or bulk delete. Checks that
+uploads really are PDF, JPEG or PNG files before handing them to
+DocumentsService.
+*/
+
+
 import {
   Controller,
   Post,

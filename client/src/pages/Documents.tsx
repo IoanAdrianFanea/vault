@@ -1,3 +1,10 @@
+/*
+Main documents list: filters, sorting, status filter from the URL, bulk
+selection, ZIP and CSV export, delete and preview. It combines the toolbar,
+table and summary bar components and keeps the filters in the page state.
+*/
+
+
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Document, DocumentStatus } from '../types';

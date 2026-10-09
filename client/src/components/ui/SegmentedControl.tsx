@@ -1,3 +1,9 @@
+/*
+Segmented button group for choosing one value, implemented as the segmented
+variant of Tabs.
+*/
+
+
 import { Tabs, type TabsProps } from './Tabs';
 
 export function SegmentedControl<T extends string>(

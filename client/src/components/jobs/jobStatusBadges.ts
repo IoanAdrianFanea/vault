@@ -1,3 +1,9 @@
+/*
+Maps each job status to the label and badge colour shown for it in the jobs
+table and drawer.
+*/
+
+
 import type { JobStatus } from '../../types';
 import type { BadgeTone } from '../ui';
 

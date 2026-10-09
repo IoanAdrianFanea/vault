@@ -1,3 +1,11 @@
+/*
+Document business logic: upload with text extraction or OCR, listing with
+filters and sorting, status counts, search with highlighted snippets and soft
+deletion into the recycle bin. Non-admins only see documents from projects
+they belong to, and soft-deleted documents never appear.
+*/
+
+
 import {
   Injectable,
   Logger,

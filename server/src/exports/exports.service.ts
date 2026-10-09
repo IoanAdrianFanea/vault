@@ -1,3 +1,10 @@
+/*
+Reads documents out of blob storage for single-file downloads and
+multi-document zip exports. Only returns non-deleted documents in live
+projects the user can access.
+*/
+
+
 import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BlobStore } from '../storage/blob-store.interface';

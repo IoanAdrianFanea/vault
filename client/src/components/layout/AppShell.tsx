@@ -1,3 +1,10 @@
+/*
+Main signed-in layout: header with search, upload button and profile menu, plus
+a sidebar with navigation and live document status counts. It loads the current
+user once and shares it with pages through context.
+*/
+
+
 import {
   useEffect,
   useMemo,

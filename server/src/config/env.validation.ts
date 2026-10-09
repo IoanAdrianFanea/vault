@@ -1,3 +1,10 @@
+/*
+Validates and normalises environment variables at startup, failing fast with
+a list of every problem found. Plugged into ConfigModule in AppModule, and
+sets defaults for optional settings.
+*/
+
+
 import 'reflect-metadata';
 import {
   IsIn,

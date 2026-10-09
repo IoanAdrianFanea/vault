@@ -1,3 +1,9 @@
+/*
+Table listing jobs with a type icon, status badge and created time. Rows can be
+selected, and failed jobs offer a retry.
+*/
+
+
 import type { Job, JobType } from '../../types';
 import {
   Badge,

@@ -1,3 +1,9 @@
+/*
+IndexedDB storage for the chosen save folder handle, so the choice survives page
+reloads. Every operation fails quietly when IndexedDB is unavailable.
+*/
+
+
 const DB_NAME = 'docindex';
 const DB_VERSION = 1;
 const STORE_NAME = 'settings';

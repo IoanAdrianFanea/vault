@@ -1,3 +1,10 @@
+/*
+Parses and type-checks the custom filter values sent with uploads and list
+queries, and turns them into Prisma rows and where-clauses. Used by
+DocumentsService.
+*/
+
+
 import { BadRequestException } from '@nestjs/common';
 import { FilterType, type FilterDefinition, type Prisma } from '@prisma/client';
 

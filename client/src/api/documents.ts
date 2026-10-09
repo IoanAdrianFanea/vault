@@ -1,3 +1,10 @@
+/*
+Client for the document endpoints: upload, list with filters and sorting, status
+counts, single document and extracted text, search and single or bulk delete.
+Also defines the document-related response types.
+*/
+
+
 import type { FilterType } from './filters';
 import { apiFetch } from './http';
 

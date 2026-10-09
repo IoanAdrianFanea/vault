@@ -1,3 +1,10 @@
+/*
+Large modal that previews a document's file and extracted text, shows its page
+count and custom field values, and offers download. The file is fetched as a
+blob and shown through a temporary object URL.
+*/
+
+
 import { useEffect, useId, useState } from 'react';
 import type { Document, DocumentFilterValue } from '../../types';
 import type { FilterDefinition } from '../../api/filters';

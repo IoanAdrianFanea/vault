@@ -1,7 +1,8 @@
-/**
- * Storage key constants and utilities.
- * Single source of truth for every storage key format across active, archived, and deleted areas.
- */
+/*
+Single source of truth for storage key formats across the active, archived
+and deleted areas, plus helpers to build, inspect and safety-check keys.
+*/
+
 
 export const ACTIVE_PREFIX = 'active/';
 export const ARCHIVED_PREFIX = 'archived/';

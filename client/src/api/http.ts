@@ -1,3 +1,11 @@
+/*
+Shared request helper for every API call: adds the access token, refreshes it
+once on a 401 and retries, and turns network, rate-limit and size failures into
+readable errors. It also holds the access token in session storage and sends the
+user to the login page when their session has ended.
+*/
+
+
 export const API_URL =
   import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:3000');
 

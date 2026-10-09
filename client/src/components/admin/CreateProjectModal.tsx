@@ -1,3 +1,8 @@
+/*
+Modal form for creating a new project from the admin projects page.
+*/
+
+
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createProject, type AdminProject } from '../../api/projects';
 import { Button, FormField, Input, Modal } from '../ui';

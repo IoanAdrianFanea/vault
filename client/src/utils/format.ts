@@ -1,4 +1,9 @@
+/*
+Display formatting for dates, times, file sizes and counts, using UK
+conventions. Invalid dates show as a dash.
+*/
 // Built from date parts: en-GB Intl output uses "Sept" and a comma before the time.
+
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 

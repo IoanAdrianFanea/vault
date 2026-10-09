@@ -1,3 +1,10 @@
+/*
+Manages the admin-defined custom filter fields: list, create (up to
+MAX_ACTIVE_FILTERS), rename, change type and delete. Changing a filter's type
+discards the values already entered for it.
+*/
+
+
 import {
   BadRequestException,
   ConflictException,

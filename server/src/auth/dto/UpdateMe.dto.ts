@@ -1,3 +1,9 @@
+/*
+Request body for PATCH /auth/me, where signed-in users update their own name,
+email, language or timezone. Every field is optional.
+*/
+
+
 import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString } from 'class-validator';
 import { normalizeEmail } from '../../common/email.util';

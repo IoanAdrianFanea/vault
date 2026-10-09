@@ -1,3 +1,9 @@
+/*
+Root component that defines every route. Pages are wrapped in the sign-in check
+and the app shell, and the /admin section is gated by an admin-only guard.
+*/
+
+
 import { useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';

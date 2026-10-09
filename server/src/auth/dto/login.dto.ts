@@ -1,3 +1,9 @@
+/*
+Request body for signing in, with the email trimmed and lower-cased before
+validation.
+*/
+
+
 import { Transform } from 'class-transformer';
 import { IsEmail, IsString } from 'class-validator';
 import { normalizeEmail } from '../../common/email.util';

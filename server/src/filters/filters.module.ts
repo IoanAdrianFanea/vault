@@ -1,3 +1,9 @@
+/*
+Nest module for the admin-defined custom filter fields, exporting
+FiltersService.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { FiltersController } from './filters.controller';
 import { FiltersService } from './filters.service';

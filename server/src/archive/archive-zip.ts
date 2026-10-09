@@ -1,3 +1,10 @@
+/*
+Zip helpers for project archiving: sanitise and de-duplicate entry names, and
+read, verify and extract archive zips against their manifest. Used by
+ArchiveService when archiving and restoring projects.
+*/
+
+
 import yauzl, { type Entry } from 'yauzl';
 import {
   ARCHIVE_FILES_DIR,

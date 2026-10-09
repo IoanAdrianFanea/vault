@@ -1,3 +1,9 @@
+/*
+Confirmation dialog built on Modal, with a confirm button that shows progress
+while the action runs. Defaults to a destructive style.
+*/
+
+
 import { useId, type ReactNode } from 'react';
 import { Button } from './Button';
 import { Modal } from './Modal';

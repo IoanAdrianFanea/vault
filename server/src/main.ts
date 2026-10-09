@@ -1,3 +1,10 @@
+/*
+Server entry point: creates the Nest app and applies security headers, CORS,
+cookie parsing and global DTO validation. In production it also adds the /api
+prefix and serves the built React client.
+*/
+
+
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';

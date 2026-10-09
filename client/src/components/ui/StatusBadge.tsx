@@ -1,3 +1,9 @@
+/*
+Badge showing a document's processing status. A failed status shows its error
+message on hover.
+*/
+
+
 import type { DocumentStatus } from '../../types';
 import { Badge } from './Badge';
 import { documentStatusStyles } from './statusTones';

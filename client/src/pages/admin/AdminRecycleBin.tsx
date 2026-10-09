@@ -1,3 +1,10 @@
+/*
+Admin tab for the recycle bin, covering deleted documents and deleted projects.
+Items can be restored (asking which project when the original is gone) or
+deleted permanently, one at a time or in bulk.
+*/
+
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   getDeletedDocuments,

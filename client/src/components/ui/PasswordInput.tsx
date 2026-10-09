@@ -1,3 +1,8 @@
+/*
+Password field with a show or hide toggle, built on Input.
+*/
+
+
 import { useId, useState } from 'react';
 import { IconButton } from './IconButton';
 import { Input, type InputProps } from './Input';

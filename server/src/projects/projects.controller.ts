@@ -1,3 +1,10 @@
+/*
+HTTP endpoints for projects: any signed-in user can list the projects they
+can see, and admins can create, rename and delete projects and manage their
+members.
+*/
+
+
 import {
   BadRequestException,
   Controller,

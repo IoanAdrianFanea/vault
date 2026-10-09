@@ -1,3 +1,9 @@
+/*
+Confirmation dialog for deleting a project, which moves it and its documents to
+the recycle bin. Used from the admin projects page.
+*/
+
+
 import { useEffect, useState } from 'react';
 import { deleteProject } from '../../api/projects';
 import { ConfirmDialog, InlineAlert } from '../ui';

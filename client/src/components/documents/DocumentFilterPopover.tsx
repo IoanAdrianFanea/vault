@@ -1,3 +1,10 @@
+/*
+Popover form for filtering documents by keyword, project and the admin-defined
+custom fields, with date range validation. Edits a draft and applies it only on
+submit.
+*/
+
+
 import { useId, useState, type FormEvent } from 'react';
 import type { CustomFilterQueryValue } from '../../api/documents';
 import type { FilterDefinition } from '../../api/filters';

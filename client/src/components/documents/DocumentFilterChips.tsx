@@ -1,3 +1,9 @@
+/*
+Row of removable chips showing the filters currently applied to the documents
+list, with a clear-all action.
+*/
+
+
 import { Chip, TextAction } from '../ui';
 import type { FilterChip } from './documentFilters';
 

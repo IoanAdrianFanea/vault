@@ -1,3 +1,9 @@
+/*
+Root Nest module: loads and validates config, sets up scheduling and the
+global rate limit, and imports every feature module.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';

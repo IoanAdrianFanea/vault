@@ -1,4 +1,11 @@
+/*
+Restores the SQLite database from a backup when a RESTORE marker file in the
+backups folder names one, then renames the marker so it runs only once.
+Called before the server starts, through scripts/restore-database.ts.
+*/
 // Direct fs usage allowed: database restore hook (RQ7).
+
+
 import { promises as fs } from 'fs';
 import * as path from 'path';
 

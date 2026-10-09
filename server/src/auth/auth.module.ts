@@ -1,3 +1,9 @@
+/*
+Nest module that wires authentication: JWT signing, the Passport JWT strategy
+and the auth controller and service. Exports AuthService.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';

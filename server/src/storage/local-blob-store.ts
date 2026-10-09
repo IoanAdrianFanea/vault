@@ -1,4 +1,12 @@
+/*
+BlobStore implementation that keeps files on local disk under STORAGE_ROOT
+(the persistent disk in production). Gzips large files when that saves enough
+space, decompresses them on read and rejects keys that would escape the
+storage root.
+*/
 // Direct fs usage allowed: local blob storage provider (RQ7).
+
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {

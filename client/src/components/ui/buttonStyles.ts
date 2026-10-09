@@ -1,3 +1,9 @@
+/*
+Tailwind class definitions shared by Button, ButtonLink and IconButton, so every
+button variant and size looks the same.
+*/
+
+
 export type ButtonVariant = 'primary' | 'dark' | 'secondary' | 'ghost' | 'danger' | 'inverse';
 export type ButtonSize = 'sm' | 'md';
 

@@ -1,3 +1,10 @@
+/*
+Search results page for the query in the URL, with highlighted snippets, row
+selection, bulk export and delete, and a document drawer and preview. Results
+come from the server's file name and text search.
+*/
+
+
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Document } from '../types';

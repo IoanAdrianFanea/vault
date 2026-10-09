@@ -1,3 +1,10 @@
+/*
+Shared types and constants for project archives: the manifest.json format
+stored inside each archive zip and the result shapes returned by the archive
+endpoints.
+*/
+
+
 import type { ArchiveOperation } from '@prisma/client';
 
 export const ARCHIVE_MANIFEST_VERSION = 1;

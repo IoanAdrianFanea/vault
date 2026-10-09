@@ -1,3 +1,9 @@
+/*
+Nest module that wires the documents controller to the documents and
+text-extraction services, and exports DocumentsService.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';

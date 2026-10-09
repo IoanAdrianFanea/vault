@@ -1,3 +1,10 @@
+/*
+Shared Prisma where-clauses defining which projects are live (shown in normal
+views) and writable (accepting changes). Used wherever projects or their
+documents are read or modified.
+*/
+
+
 import type { Prisma } from '@prisma/client';
 
 /**

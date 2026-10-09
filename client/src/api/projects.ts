@@ -1,3 +1,10 @@
+/*
+Client for the project endpoints: list, create, rename and delete projects, and
+manage a project's members. The projectsService object returns the projects a
+user can see or upload to.
+*/
+
+
 import { apiFetch } from './http';
 
 export interface AdminProject {

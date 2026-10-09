@@ -1,3 +1,9 @@
+/*
+Nest module for the recycle bin: its controller, service and the nightly
+purge task. Exports RecycleBinService.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';

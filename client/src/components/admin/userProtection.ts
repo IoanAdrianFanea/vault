@@ -1,3 +1,10 @@
+/*
+Rules that stop an admin deleting or demoting their own account, or the last
+active admin. Returns the reason to show when the action is blocked, for the
+admin users list.
+*/
+
+
 import type { UserSummary } from '../../api/users';
 
 export const OWN_ACCOUNT_DELETE_REASON = "You can't delete your own account";

@@ -1,3 +1,9 @@
+/*
+Query parameters for the document list and status counts: project, free-text
+search, custom filters, status and sort order.
+*/
+
+
 import { IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
 import { DocumentStatus } from '@prisma/client';
 

@@ -1,3 +1,8 @@
+/*
+Styled text input with sizes, an optional leading icon and an invalid state.
+*/
+
+
 import type { InputHTMLAttributes, Ref } from 'react';
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {

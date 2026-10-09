@@ -1,3 +1,10 @@
+/*
+Sends account emails over SMTP: verification links to new users and
+pending-registration alerts to admins. Without SMTP settings it only logs
+them, and a send failure never fails the calling request.
+*/
+
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';

@@ -1,3 +1,9 @@
+/*
+Small spinning loading indicator, hidden from screen readers unless it has a
+label.
+*/
+
+
 export interface SpinnerProps {
   size?: 'sm' | 'md';
   label?: string;

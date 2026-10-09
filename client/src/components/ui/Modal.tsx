@@ -1,3 +1,10 @@
+/*
+Accessible modal dialog rendered in a portal, with a focus trap, Escape to
+close, a configurable size and a footer slot. The base for every modal and
+confirmation dialog.
+*/
+
+
 import {
   useEffect,
   useId,

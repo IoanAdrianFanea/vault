@@ -1,3 +1,9 @@
+/*
+Modal form where an admin edits a user's name or email, or sets a new password.
+Only the fields that changed are sent.
+*/
+
+
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { adminEditUser, type UserSummary } from '../../api/users';
 import {

@@ -1,3 +1,9 @@
+/*
+Landing page for the link in the verification email. It sends the token from the
+URL to the server once and shows whether the email was confirmed.
+*/
+
+
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { authService } from '../api/auth';

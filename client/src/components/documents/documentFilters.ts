@@ -1,3 +1,11 @@
+/*
+Filter and sort state logic for the documents page: applied-filter types,
+normalising and counting filters, building the removable filter chips and
+converting state into an API query. Also remembers the selected project for the
+browser session.
+*/
+
+
 import type {
   CustomFilterQueryValue,
   DocumentStatus,

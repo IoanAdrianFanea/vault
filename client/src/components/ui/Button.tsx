@@ -1,3 +1,9 @@
+/*
+Standard button and router-link button with variants, sizes, an optional icon
+and a loading state that disables the control.
+*/
+
+
 import type { ButtonHTMLAttributes, Ref } from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { buttonClassName, type ButtonSize, type ButtonVariant } from './buttonStyles';

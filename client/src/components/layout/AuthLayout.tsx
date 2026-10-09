@@ -1,3 +1,9 @@
+/*
+Centred card layout with the product branding, shared by the login,
+registration, password change and email verification pages.
+*/
+
+
 import type { ReactNode } from 'react';
 
 export interface AuthLayoutProps {

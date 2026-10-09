@@ -1,3 +1,9 @@
+/*
+Right-hand detail panel with a header, scrolling body and optional footer. It
+takes focus when opened and closes on Escape unless a modal is open above it.
+*/
+
+
 import {
   useEffect,
   useId,

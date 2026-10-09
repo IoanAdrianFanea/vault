@@ -1,3 +1,9 @@
+/*
+Admin tab listing archived projects, with search, download, restore and delete.
+It also shows when an archive operation is still in progress.
+*/
+
+
 import { useEffect, useState } from 'react';
 import {
   deleteArchivedProject,

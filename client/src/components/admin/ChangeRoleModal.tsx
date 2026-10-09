@@ -1,3 +1,9 @@
+/*
+Modal where an admin switches a user between the User and Admin roles. Used from
+the admin users page.
+*/
+
+
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { setUserRole, type UserSummary } from '../../api/users';
 import { Button, InlineAlert, Modal } from '../ui';

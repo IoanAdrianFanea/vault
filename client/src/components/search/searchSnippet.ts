@@ -1,3 +1,9 @@
+/*
+Splits a search result snippet containing <mark> tags from the server into plain
+and highlighted text segments, so it can be rendered without injecting raw HTML.
+*/
+
+
 export interface SnippetSegment {
   text: string;
   highlighted: boolean;

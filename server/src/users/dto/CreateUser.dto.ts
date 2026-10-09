@@ -1,3 +1,9 @@
+/*
+Request body for an admin creating a user account directly, with a temporary
+password and a role.
+*/
+
+
 import { UserRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsString } from 'class-validator';

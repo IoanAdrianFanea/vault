@@ -1,3 +1,9 @@
+/*
+Extracts the filename from a Content-Disposition response header, handling the
+UTF-8, quoted and bare forms, and uses a fallback when none is present.
+*/
+
+
 export function getFilenameFromContentDisposition(
   header: string | null,
   fallback: string,

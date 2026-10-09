@@ -1,3 +1,9 @@
+/*
+Browser entry point: restores the saved download folder, then mounts the React
+app into the page.
+*/
+
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'

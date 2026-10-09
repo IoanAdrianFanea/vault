@@ -1,3 +1,10 @@
+/*
+The single definition of the strong-password policy, applied as one decorator
+to every self-chosen password field. Each rule has its own user-facing error
+message.
+*/
+
+
 import { applyDecorators } from '@nestjs/common';
 import { IsString, MinLength, Matches } from 'class-validator';
 

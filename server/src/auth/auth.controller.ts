@@ -1,3 +1,10 @@
+/*
+HTTP endpoints for registration, email verification, login, token refresh,
+logout and the signed-in user's own profile and password. The refresh token
+travels only in an HttpOnly cookie; the access token is returned in the body.
+*/
+
+
 import {
   Controller,
   Post,

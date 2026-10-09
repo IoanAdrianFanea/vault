@@ -1,3 +1,9 @@
+/*
+Scrollable content wrapper used by each admin page, with an optional toolbar
+above the content and extra bottom space when a bulk action bar is showing.
+*/
+
+
 import type { ReactNode } from 'react';
 
 export interface AdminSectionProps {

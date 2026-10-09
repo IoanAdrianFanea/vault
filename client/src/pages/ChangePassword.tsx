@@ -1,3 +1,9 @@
+/*
+Page shown after a first sign-in with a temporary password, forcing the user to
+set a new one that meets the password rules before continuing.
+*/
+
+
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../api/auth';

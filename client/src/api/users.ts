@@ -1,3 +1,10 @@
+/*
+Client for the admin user-management endpoints: list, search, create, edit and
+delete users, change roles and approve or reject account requests. Also provides
+bulk helpers that tolerate partial failures.
+*/
+
+
 import { apiFetch, readErrorMessage } from './http';
 
 export type AccountStatus = 'PENDING' | 'ACTIVE' | 'REJECTED';

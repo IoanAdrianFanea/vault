@@ -1,3 +1,10 @@
+/*
+Extracts searchable text from uploads: pdf-parse for PDFs and English
+tesseract.js OCR for JPEG and PNG images. Used by DocumentsService during
+upload.
+*/
+
+
 import { Injectable } from '@nestjs/common';
 import { recognize } from 'tesseract.js';
 

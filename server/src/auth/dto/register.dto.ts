@@ -1,3 +1,9 @@
+/*
+Request body for self-registration: a normalised email, a password that meets
+the strong-password policy and an optional full name.
+*/
+
+
 import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 import { normalizeEmail } from '../../common/email.util';

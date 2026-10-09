@@ -1,3 +1,9 @@
+/*
+Floating panel anchored to a trigger button. It closes on Escape or an outside
+click, and keeps focus handling in one place for the filter popover and menus.
+*/
+
+
 import {
   useCallback,
   useEffect,

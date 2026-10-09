@@ -1,3 +1,9 @@
+/*
+Authenticated endpoint that streams the selected documents to the client as a
+single zip download.
+*/
+
+
 import {
   Controller,
   Post,

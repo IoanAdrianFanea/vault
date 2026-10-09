@@ -1,3 +1,10 @@
+/*
+Bulk action bar for the documents list, offering ZIP download, optional CSV
+export and delete for the selected rows. A thin wrapper around the shared
+BulkBar.
+*/
+
+
 import { BulkBar, type BulkBarAction } from '../ui';
 
 export interface BulkActionBarProps {

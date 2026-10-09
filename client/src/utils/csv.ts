@@ -1,3 +1,9 @@
+/*
+Builds CSV text from rows and column definitions, quoting cells and neutralising
+spreadsheet formulas, and saves it as a file. Used by the documents CSV export.
+*/
+
+
 import { saveFile, type SaveResult, type SaveTarget } from './saveFile';
 
 export interface CsvColumn<T> {

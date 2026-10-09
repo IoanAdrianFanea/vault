@@ -1,3 +1,9 @@
+/*
+Inline message box in error, warning, info or success tones, with an optional
+dismiss button.
+*/
+
+
 import type { ReactNode } from 'react';
 import { IconButton } from './IconButton';
 

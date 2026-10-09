@@ -1,3 +1,9 @@
+/*
+React context and hooks that expose the signed-in user, loaded by AppShell, to
+any component. Includes a helper that reports whether that user is an admin.
+*/
+
+
 import { createContext, useContext } from 'react';
 import type { User } from '../../api/auth';
 

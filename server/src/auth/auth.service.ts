@@ -1,3 +1,11 @@
+/*
+Core authentication logic: registration with email verification and admin
+approval, login, refresh-token rotation and revocation, password changes and
+self-service profile updates. Refresh tokens are stored only as SHA-256
+hashes, one row per session.
+*/
+
+
 import {
   Injectable,
   UnauthorizedException,

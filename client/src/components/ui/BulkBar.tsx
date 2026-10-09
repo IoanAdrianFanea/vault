@@ -1,3 +1,9 @@
+/*
+Floating bar shown at the bottom of the screen while rows are selected, with the
+selected count, caller-supplied actions and a clear button.
+*/
+
+
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 import { formatCount } from '../../utils/format';

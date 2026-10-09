@@ -1,3 +1,8 @@
+/*
+Styled native select with sizes and an invalid state.
+*/
+
+
 import type { Ref, SelectHTMLAttributes } from 'react';
 
 export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {

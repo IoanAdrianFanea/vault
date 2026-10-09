@@ -1,3 +1,9 @@
+/*
+Admin tab for the custom filter fields users can tag documents with: add,
+rename, change the type and delete, up to the maximum number allowed.
+*/
+
+
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import {
   filtersService,

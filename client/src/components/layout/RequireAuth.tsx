@@ -1,3 +1,10 @@
+/*
+Route guard that makes sure a session exists before showing its children,
+refreshing silently when needed. It redirects to the login page when signed out
+and offers a retry when the server is unreachable.
+*/
+
+
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { ensureSession, getAccessToken, SERVER_UNAVAILABLE_MESSAGE } from '../../api/http';

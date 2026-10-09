@@ -1,3 +1,11 @@
+/*
+Saves downloaded files to the folder the user picked, in a sub-folder per
+project with a free file name, or to the browser's Downloads folder when that
+isn't possible. It also manages the chosen folder and its permission, using the
+File System Access API where available.
+*/
+
+
 import {
   deleteSaveFolderHandle,
   loadSaveFolderHandle,

@@ -1,3 +1,10 @@
+/*
+Injectable Prisma client connected to the SQLite database at DATABASE_URL
+through the better-sqlite3 adapter. Services use it directly for all database
+access.
+*/
+
+
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';

@@ -1,3 +1,10 @@
+/*
+Project business logic: listing visible projects, create, rename, membership
+changes and soft deletion. Deleting a project moves it and all its active
+documents into the recycle bin together, and archived projects are read-only.
+*/
+
+
 import {
   Injectable,
   Logger,

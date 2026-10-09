@@ -1,3 +1,10 @@
+/*
+Table building blocks with consistent styling: the scrolling container, sortable
+header cells, rows, cells and loading skeleton rows. Used by the documents, jobs
+and admin tables.
+*/
+
+
 import type {
   HTMLAttributes,
   ReactNode,

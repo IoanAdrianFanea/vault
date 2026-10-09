@@ -1,3 +1,9 @@
+/*
+Modal for managing who belongs to a project: search users, stage several to add,
+and remove existing members. Used from the admin projects page.
+*/
+
+
 import { useEffect, useRef, useState } from 'react';
 import {
   addProjectMember,

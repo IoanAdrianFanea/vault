@@ -1,3 +1,8 @@
+/*
+Nest module that provides the scheduled database backup service.
+*/
+
+
 import { Module } from '@nestjs/common';
 import { BackupService } from './backup.service';
 

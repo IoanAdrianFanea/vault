@@ -1,3 +1,9 @@
+/*
+Tab bar that works as route links or as a controlled tab set, in an underline or
+segmented style. Supports arrow-key navigation and count badges.
+*/
+
+
 import {
   useRef,
   type KeyboardEvent,

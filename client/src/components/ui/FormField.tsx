@@ -1,3 +1,9 @@
+/*
+Wraps a form control with an uppercase label, plus either an error message or a
+hint below it.
+*/
+
+
 import { useId, type ReactNode } from 'react';
 
 export interface FormFieldProps {

@@ -1,3 +1,11 @@
+/*
+Moves whole projects from active storage into a single verified zip and back,
+and handles archive downloads and moving archived projects to the recycle
+bin. Each operation claims the project row first, and operations interrupted
+by a restart are cleaned up on startup.
+*/
+
+
 import {
   Injectable,
   Inject,

@@ -1,3 +1,9 @@
+/*
+Admin-only HTTP endpoints for the recycle bin: list deleted documents and
+projects, restore them or delete them permanently.
+*/
+
+
 import {
   BadRequestException,
   Body,

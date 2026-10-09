@@ -1,3 +1,10 @@
+/*
+Client for the custom filter field endpoints: any signed-in user can list them,
+and admins can create, edit and delete them. Exposes them as the filtersService
+object.
+*/
+
+
 import { apiFetch } from './http';
 
 export type FilterType = 'TEXT' | 'NUMBER' | 'DATE';

@@ -1,3 +1,9 @@
+/*
+Client for the admin recycle bin endpoints: list deleted documents and projects,
+restore them or delete them permanently.
+*/
+
+
 import { apiFetch } from './http';
 
 export interface DeletedDocument {
