@@ -471,11 +471,8 @@ export default function AdminPending() {
             </p>
           ) : (
             <p>
-              Delete {singleDisplayName}? Their account{' '}
-              <strong className="font-semibold text-ink">
-                and every document they uploaded
-              </strong>{' '}
-              will be permanently deleted. This can't be undone.
+              Delete {singleDisplayName}? They'll lose access straight away.
+              Documents they uploaded stay in the register.
             </p>
           )
         }
@@ -507,11 +504,8 @@ export default function AdminPending() {
             <p>These users won't be able to sign in.</p>
           ) : (
             <p>
-              Their accounts{' '}
-              <strong className="font-semibold text-ink">
-                and every document they uploaded
-              </strong>{' '}
-              will be permanently deleted. This can't be undone.
+              They'll lose access straight away. Documents they uploaded stay in
+              the register.
             </p>
           )
         }

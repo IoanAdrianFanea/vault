@@ -10,6 +10,11 @@ import { CreateUserModal } from '../../components/admin/CreateUserModal';
 import { EditUserModal } from '../../components/admin/EditUserModal';
 import { AdminSection } from '../../components/admin/AdminSection';
 import { useAdminLayout } from '../../components/admin/adminLayoutContext';
+import {
+  countActiveAdmins,
+  getUserProtection,
+} from '../../components/admin/userProtection';
+import { useCurrentUser } from '../../components/layout/currentUser';
 import { useRangeSelection } from '../../hooks/useRangeSelection';
 import {
   Avatar,
@@ -58,6 +63,8 @@ const SORT_OPTIONS: DropdownOption<SortOption>[] = [
 
 export default function AdminUsers() {
   const { refreshPendingCount } = useAdminLayout();
+  const currentUser = useCurrentUser();
+  const currentUserId = currentUser.status === 'ready' ? currentUser.user.id : null;
 
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,10 +138,19 @@ export default function AdminUsers() {
       });
   }, [users, search, filterRole, filterStatus, sortBy]);
 
+  const activeAdminCount = useMemo(() => countActiveAdmins(users), [users]);
+
   const selection = useRangeSelection(
     visibleUsers.map((u) => u.id),
     `${search}|${filterRole}|${filterStatus}|${sortBy}`,
   );
+
+  const selectedIdList = Array.from(selection.selectedIds);
+  const bulkDeletableIds = selectedIdList.filter((id) => {
+    const user = users.find((u) => u.id === id);
+    return !user || !getUserProtection(user, currentUserId, activeAdminCount).deleteBlockedReason;
+  });
+  const bulkSkippedCount = selectedIdList.length - bulkDeletableIds.length;
 
   const handleRoleUpdated = (updated: UserSummary) => {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -157,19 +173,29 @@ export default function AdminUsers() {
   };
 
   const handleBulkDelete = async () => {
-    const ids = Array.from(selection.selectedIds);
+    const ids = bulkDeletableIds;
     setBulkLoading(true);
 
     try {
       const res = await bulkDeleteUsers(ids);
       setUsers((prev) => prev.filter((u) => !res.succeeded.includes(u.id)));
-      const failedIds = ids.filter((id) => !res.succeeded.includes(id));
-      selection.retain(failedIds);
+      const keptIds = selectedIdList.filter((id) => !res.succeeded.includes(id));
+      selection.retain(keptIds);
 
+      const sentences: string[] = [];
       if (res.failed > 0) {
-        setPageAlert(
-          `${formatCountLabel(res.failed, 'user', 'user accounts')} couldn't be deleted.`,
+        sentences.push(
+          `${formatCountLabel(res.failed, 'user', 'users')} couldn't be deleted.`,
         );
+        if (res.firstError) sentences.push(res.firstError);
+      }
+      if (bulkSkippedCount > 0) {
+        sentences.push(
+          `${formatCountLabel(bulkSkippedCount, 'user', 'users')} skipped: you can't delete your own account or the last active admin.`,
+        );
+      }
+      if (sentences.length > 0) {
+        setPageAlert(sentences.join(' '));
       }
       setBulkDeleteOpen(false);
       refreshPendingCount();
@@ -306,7 +332,11 @@ export default function AdminUsers() {
             {visibleUsers.map((user) => {
                 const isSelected = selection.selectedIds.has(user.id);
                 const displayName = user.fullName || user.email;
-
+                const { deleteBlockedReason, roleBlockedReason } = getUserProtection(
+                  user,
+                  currentUserId,
+                  activeAdminCount,
+                );
                 return (
                   <TableRow
                     key={user.id}
@@ -374,12 +404,16 @@ export default function AdminUsers() {
                           size="sm"
                           icon="admin_panel_settings"
                           label={`Change role for ${displayName}`}
+                          disabled={Boolean(roleBlockedReason)}
+                          {...(roleBlockedReason ? { title: roleBlockedReason } : {})}
                           onClick={() => setRoleTarget(user)}
                         />
                         <IconButton
                           size="sm"
                           icon="delete"
                           label={`Delete ${displayName}`}
+                          disabled={Boolean(deleteBlockedReason)}
+                          {...(deleteBlockedReason ? { title: deleteBlockedReason } : {})}
                           onClick={() => setDeleteTarget(user)}
                         />
                       </div>
@@ -400,6 +434,7 @@ export default function AdminUsers() {
               label: 'Delete',
               icon: 'delete',
               onClick: () => setBulkDeleteOpen(true),
+              disabled: bulkDeletableIds.length === 0,
             },
           ]}
           busy={bulkLoading}
@@ -409,19 +444,23 @@ export default function AdminUsers() {
 
       <ConfirmDialog
         isOpen={bulkDeleteOpen}
-        title={`Delete ${formatCountLabel(selection.selectedIds.size, 'user', 'users')}?`}
+        title={`Delete ${formatCountLabel(bulkDeletableIds.length, 'user', 'users')}?`}
         confirmLabel="Delete"
         isConfirming={bulkLoading}
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkDeleteOpen(false)}
         message={
-          <p>
-            Their accounts{' '}
-            <strong className="font-semibold text-ink">
-              and every document they uploaded
-            </strong>{' '}
-            will be permanently deleted. This can't be undone.
-          </p>
+          <>
+            <p>
+              They'll lose access straight away. Documents they uploaded stay in the register.
+            </p>
+            {bulkSkippedCount > 0 && (
+              <p className="mt-2">
+                {formatCountLabel(bulkSkippedCount, 'selected user', 'selected users')} will be
+                skipped: you can't delete your own account or the last active admin.
+              </p>
+            )}
+          </>
         }
       />
     </AdminSection>

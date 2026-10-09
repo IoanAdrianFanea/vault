@@ -1,6 +1,5 @@
 import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch, readErrorMessage } from './http';
 
 export type ArchiveOperation = 'ARCHIVING' | 'UNARCHIVING' | 'DELETING';
 
@@ -36,58 +35,35 @@ export interface UnarchiveProjectResult {
   missingDocuments: MissingArchiveDocument[];
 }
 
-function authHeaders(): Record<string, string> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-  return { Authorization: `Bearer ${accessToken}` };
-}
-
-async function readError(response: Response, fallback: string): Promise<string> {
-  const data = await response.json().catch(() => null);
-  return data?.message ?? fallback;
-}
-
 export async function getArchivedProjects(): Promise<ArchivedProject[]> {
-  const response = await fetch(`${API_URL}/archive`, {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
+  const response = await apiFetch('/archive');
 
   if (!response.ok) {
-    throw new Error(await readError(response, 'Failed to fetch archived projects'));
+    throw new Error(await readErrorMessage(response, 'Failed to fetch archived projects'));
   }
 
   return response.json();
 }
 
 export async function archiveProject(id: string): Promise<ArchiveProjectResult> {
-  const response = await fetch(`${API_URL}/archive/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/archive/${encodeURIComponent(id)}`, {
     method: 'POST',
-    headers: authHeaders(),
-    credentials: 'include',
   });
 
   if (!response.ok) {
-    throw new Error(await readError(response, 'Failed to archive project'));
+    throw new Error(await readErrorMessage(response, 'Failed to archive project'));
   }
 
   return response.json();
 }
 
 export async function unarchiveProject(id: string): Promise<UnarchiveProjectResult> {
-  const response = await fetch(
-    `${API_URL}/archive/${encodeURIComponent(id)}/restore`,
-    {
-      method: 'POST',
-      headers: authHeaders(),
-      credentials: 'include',
-    },
-  );
+  const response = await apiFetch(`/archive/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+  });
 
   if (!response.ok) {
-    throw new Error(await readError(response, 'Failed to unarchive project'));
+    throw new Error(await readErrorMessage(response, 'Failed to unarchive project'));
   }
 
   return response.json();
@@ -97,17 +73,12 @@ export async function downloadProjectArchive(
   id: string,
   fallbackName: string,
 ): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/archive/${encodeURIComponent(id)}/download`,
-    {
-      method: 'GET',
-      headers: authHeaders(),
-      credentials: 'include',
-    },
-  );
+  const response = await apiFetch(`/archive/${encodeURIComponent(id)}/download`, {
+    method: 'GET',
+  });
 
   if (!response.ok) {
-    throw new Error(await readError(response, 'Failed to download project archive'));
+    throw new Error(await readErrorMessage(response, 'Failed to download project archive'));
   }
 
   const contentDisposition = response.headers.get('Content-Disposition');
@@ -128,13 +99,11 @@ export async function downloadProjectArchive(
 }
 
 export async function deleteArchivedProject(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/archive/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/archive/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
-    credentials: 'include',
   });
 
   if (!response.ok) {
-    throw new Error(await readError(response, 'Failed to delete archived project'));
+    throw new Error(await readErrorMessage(response, 'Failed to delete archived project'));
   }
 }

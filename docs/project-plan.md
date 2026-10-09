@@ -210,16 +210,44 @@ Status: **complete**
 
 ---
 
+## Phase 4.5 – Pilot readiness
+
+Status: **in progress** (Groups A–C complete)
+
+Hardening, deployment automation, security, and operator tooling for the initial pilot deployment.
+
+| Item | Status | Notes |
+|---|---|---|
+| User deletion keeps documents | ✅ done | Preserves documents, text, and blobs with `uploadedByEmail` snapshot on deletion |
+| Account status lockout | ✅ done | Non-ACTIVE accounts rejected immediately on next authenticated request and refresh; tokens revoked |
+| Admin self and last-admin protection | ✅ done | Admins cannot delete, demote, or deactivate themselves; last active admin cannot be deleted or demoted (409) |
+| Admin-created users verified | ✅ done | Admin-created accounts count as verified with temporary password; prompted to change on first login |
+| Case-insensitive email | ✅ done | Normalised lowercase email handling across auth, users, and queries |
+| Refresh by session id | ✅ done | Refresh tokens tracked by JWT ID (`jti`) session lookup; sliding 7-day session, concurrent multi-device support |
+| Config validation | ✅ done | Strict environment variable validation with `validateEnv`, secret length/difference checks, and defaults |
+| Security headers and CORS | ✅ done | Helmet security headers, restrictive CSP, strict production CORS origin whitelist, trust proxy |
+| Rate limits | ✅ done | Throttler limits on auth routes (login by IP+email, register/verify by IP) and general routes (300/min) |
+| Upload limit and content check | ✅ done | Configurable `MAX_UPLOAD_MB` streaming limit (413) and magic byte file signature validation (400) |
+| Safe download filenames | ✅ done | RFC 6266/5987 content-disposition via `res.attachment` with ASCII fallback and UTF-8 `filename*` |
+| Migrations at start and restore hook | ✅ done | Startup runs restore hook before `prisma migrate deploy` and server boot |
+| Database backups | ✅ done | Scheduled nightly backups at 02:30 UTC, startup backup if stale (>24h), retention pruning (`BACKUP_KEEP`) |
+| Deploy guide | ✅ done | Operator guide covering Render configuration, backups, disaster recovery, and proxy setup in `docs/deploy.md` |
+| Silent session refresh | ⏳ planned | Group D |
+| Admin guard UI | ⏳ planned | Group D |
+| Save to folder | ⏳ planned | Group E |
+
+---
+
 ## Phase 5 – Deployment
 
-Status: **not started** — SMTP brought forward into Phase 2
+Status: **not started** — SMTP brought forward into Phase 2; backup strategy and environment configuration brought forward into Phase 4.5
 
 - HTTPS
 - OneDrive integration (replaces `LocalBlobStore`)
 - ~~SMTP setup for transactional emails (approval, verification)~~ — **done early**: `nodemailer` transport in `EmailService`, configured via `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`, falls back to console logging when unconfigured
 - Structured logging — only Nest's default `Logger` is used today
-- Environment-based configuration — partially done via `@nestjs/config` and `.env.example`
-- Backup strategy
+- ~~Environment-based configuration~~ — **done early in Phase 4.5**: strict environment validation via `validateEnv` in `server/src/config/env.validation.ts`
+- ~~Backup strategy~~ — **done early in Phase 4.5**: automated nightly SQLite backups and restore hook; automatic offsite backups stay in Phase 5
 - Print document button with print preview (if time allows)
 
 ---
@@ -259,7 +287,6 @@ Status: **not started**
 - `User` has `language`, `timezone` fields that are unused. Candidates for removal — see backlog.
 - Search loads every accessible document with extracted text into memory and filters in JavaScript (`searchDocuments`). Fine at current scale, but it will need a SQL/FTS rewrite before real data volumes.
 - `listDocuments` is hard-capped at 50 rows with no pagination, and search at 20.
-- `AuthService.refresh` matches the most recent non-revoked token for the user rather than looking up the presented token, so concurrent sessions on multiple devices can invalidate each other.
 - `POST /projects` has no membership bootstrap — a newly created project has no members until an admin adds them.
 - Deleting a project soft-deletes its documents to the recycle bin for 30-day recovery.
 - The purge task runs in-process on a single API instance. If the API is ever scaled out, every instance will run it — the conditional-delete claim makes that safe, but it is wasted work.

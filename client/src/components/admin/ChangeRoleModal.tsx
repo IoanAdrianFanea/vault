@@ -45,8 +45,8 @@ export function ChangeRoleModal({
       const updated = await setUserRole(user.id, selectedRole);
       onUpdated(updated);
       onClose();
-    } catch {
-      setError('Failed to update role. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update role. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

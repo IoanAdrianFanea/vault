@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch, readErrorMessage } from './http';
 
 export type AccountStatus = 'PENDING' | 'ACTIVE' | 'REJECTED';
 
@@ -21,18 +21,11 @@ export interface CreateUserPayload {
 }
 
 export async function createUser(payload: CreateUserPayload): Promise<UserSummary> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/users`, {
+  const response = await apiFetch('/users', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify(payload),
   });
 
@@ -45,18 +38,8 @@ export async function createUser(payload: CreateUserPayload): Promise<UserSummar
 }
 
 export async function searchUsers(q: string): Promise<UserSummary[]> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
   const params = new URLSearchParams({ q });
-  const response = await fetch(`${API_URL}/users/search?${params}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    credentials: 'include',
-  });
+  const response = await apiFetch(`/users/search?${params}`);
 
   if (!response.ok) {
     throw new Error('Failed to search users');
@@ -66,17 +49,7 @@ export async function searchUsers(q: string): Promise<UserSummary[]> {
 }
 
 export async function findAllUsers(): Promise<UserSummary[]> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-  
-  const response = await fetch(`${API_URL}/users`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    credentials: 'include',
-  });
+  const response = await apiFetch('/users');
 
   if (!response.ok) {
     throw new Error('Failed to fetch users');
@@ -86,68 +59,40 @@ export async function findAllUsers(): Promise<UserSummary[]> {
 }
 
 export async function setUserRole(userId: string, role: 'USER' | 'ADMIN'): Promise<UserSummary> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/users/${encodeURIComponent(userId)}/role`, {
+  const response = await apiFetch(`/users/${encodeURIComponent(userId)}/role`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify({ role }),
   });
 
   if (!response.ok) {
-    throw new Error('Failed to update user role');
+    throw new Error(await readErrorMessage(response, 'Failed to update user role'));
   }
 
   return response.json();
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/users/${encodeURIComponent(userId)}`, {
+  const response = await apiFetch(`/users/${encodeURIComponent(userId)}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    credentials: 'include',
   });
 
   if (!response.ok) {
-    throw new Error('Failed to delete user');
+    throw new Error(await readErrorMessage(response, 'Failed to delete user'));
   }
 }
 
 export async function getPendingUsers(): Promise<UserWithStatus[]> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/users/pending`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    credentials: 'include',
-  });
+  const response = await apiFetch('/users/pending');
 
   if (!response.ok) throw new Error('Failed to fetch pending users');
   return response.json();
 }
 
 export async function getRejectedUsers(): Promise<UserWithStatus[]> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/users/rejected`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    credentials: 'include',
-  });
+  const response = await apiFetch('/users/rejected');
 
   if (!response.ok) throw new Error('Failed to fetch rejected users');
   return response.json();
@@ -157,16 +102,11 @@ export async function updateUserAccountStatus(
   userId: string,
   status: AccountStatus,
 ): Promise<UserWithStatus> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/users/${encodeURIComponent(userId)}/status`, {
+  const response = await apiFetch(`/users/${encodeURIComponent(userId)}/status`, {
     method: 'PATCH',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify({ status }),
   });
 
@@ -185,16 +125,11 @@ export interface AdminEditUserPayload {
 }
 
 export async function adminEditUser(userId: string, payload: AdminEditUserPayload): Promise<UserSummary> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/users/${encodeURIComponent(userId)}`, {
+  const response = await apiFetch(`/users/${encodeURIComponent(userId)}`, {
     method: 'PATCH',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify(payload),
   });
 
@@ -208,10 +143,20 @@ export async function adminEditUser(userId: string, payload: AdminEditUserPayloa
 
 // Bulk helpers — use allSettled so partial failures are handled gracefully
 
-export async function bulkDeleteUsers(ids: string[]): Promise<{ succeeded: string[]; failed: number }> {
+export async function bulkDeleteUsers(
+  ids: string[],
+): Promise<{ succeeded: string[]; failed: number; firstError?: string }> {
   const results = await Promise.allSettled(ids.map((id) => deleteUser(id)));
   const succeeded = ids.filter((_, i) => results[i].status === 'fulfilled');
-  return { succeeded, failed: results.filter((r) => r.status === 'rejected').length };
+  const firstRejected = results.find(
+    (r): r is PromiseRejectedResult => r.status === 'rejected',
+  );
+  const reason = firstRejected?.reason;
+  return {
+    succeeded,
+    failed: results.filter((r) => r.status === 'rejected').length,
+    ...(reason instanceof Error ? { firstError: reason.message } : {}),
+  };
 }
 
 export async function bulkUpdateAccountStatus(
@@ -229,4 +174,3 @@ export async function bulkUpdateAccountStatus(
   });
   return { updated, succeededIds, failed: results.filter((r) => r.status === 'rejected').length };
 }
-

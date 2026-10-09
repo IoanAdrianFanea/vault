@@ -29,6 +29,7 @@ import {
   formatCountLabel,
   formatFileSize,
 } from '../utils/format';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../utils/uploadLimits';
 
 export interface UploadQueueItem {
   id: string;
@@ -55,6 +56,7 @@ export default function Upload() {
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [rejectedFileNames, setRejectedFileNames] = useState<string[]>([]);
+  const [oversizeFileNames, setOversizeFileNames] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [runResult, setRunResult] = useState<{
     tone: 'success' | 'warning';
@@ -137,16 +139,20 @@ export default function Upload() {
   const addFiles = (files: File[]) => {
     const accepted: File[] = [];
     const rejected: string[] = [];
+    const oversize: string[] = [];
 
     for (const file of files) {
-      if (allowedMimeTypes.has(file.type)) {
-        accepted.push(file);
-      } else {
+      if (!allowedMimeTypes.has(file.type)) {
         rejected.push(file.name);
+      } else if (file.size > MAX_UPLOAD_BYTES) {
+        oversize.push(file.name);
+      } else {
+        accepted.push(file);
       }
     }
 
     setRejectedFileNames(rejected);
+    setOversizeFileNames(oversize);
     setRunResult(null);
 
     if (accepted.length > 0) {
@@ -182,6 +188,7 @@ export default function Upload() {
   const clearList = () => {
     setQueue([]);
     setRejectedFileNames([]);
+    setOversizeFileNames([]);
     setRunResult(null);
   };
 
@@ -287,6 +294,15 @@ export default function Upload() {
           >
             These files weren't added because they aren't PDF, JPG or PNG:{' '}
             {rejectedFileNames.join(', ')}
+          </InlineAlert>
+        )}
+        {oversizeFileNames.length > 0 && (
+          <InlineAlert
+            tone="warning"
+            onDismiss={() => setOversizeFileNames([])}
+          >
+            These files are larger than {MAX_UPLOAD_MB} MB and weren't added:{' '}
+            {oversizeFileNames.join(', ')}
           </InlineAlert>
         )}
         {runResult && (
@@ -421,7 +437,7 @@ export default function Upload() {
               Drag files here or{' '}
               <span className="font-medium text-link underline">browse</span>
             </p>
-            <p className="text-small text-ink-muted">PDF, JPG or PNG</p>
+            <p className="text-small text-ink-muted">PDF, JPG or PNG, up to {MAX_UPLOAD_MB} MB</p>
             <input
               ref={fileInputRef}
               type="file"

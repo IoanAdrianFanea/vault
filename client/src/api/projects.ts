@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch } from './http';
 
 export interface AdminProject {
   id: string;
@@ -8,18 +8,7 @@ export interface AdminProject {
 }
 
 export async function getProjects(): Promise<AdminProject[]> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/projects`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    credentials: 'include',
-  });
+  const response = await apiFetch('/projects', { method: 'GET' });
 
   if (!response.ok) {
     throw new Error('Failed to fetch projects');
@@ -29,18 +18,11 @@ export async function getProjects(): Promise<AdminProject[]> {
 }
 
 export async function renameProject(id: string, name: string): Promise<AdminProject> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/projects/${id}`, {
+  const response = await apiFetch(`/projects/${id}`, {
     method: 'PATCH',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify({ name }),
   });
 
@@ -52,18 +34,11 @@ export async function renameProject(id: string, name: string): Promise<AdminProj
 }
 
 export async function createProject(name: string): Promise<AdminProject> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/projects`, {
+  const response = await apiFetch('/projects', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify({ name }),
   });
 
@@ -75,18 +50,7 @@ export async function createProject(name: string): Promise<AdminProject> {
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/projects/${id}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    credentials: 'include',
-  });
+  const response = await apiFetch(`/projects/${id}`, { method: 'DELETE' });
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
@@ -104,29 +68,18 @@ export interface ProjectMember {
 }
 
 export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/projects/${projectId}/members`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    credentials: 'include',
-  });
+  const response = await apiFetch(`/projects/${projectId}/members`);
 
   if (!response.ok) throw new Error('Failed to fetch project members');
   return response.json();
 }
 
 export async function addProjectMember(projectId: string, userId: string): Promise<void> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/projects/${projectId}/members`, {
+  const response = await apiFetch(`/projects/${projectId}/members`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
     body: JSON.stringify({ userId }),
   });
 
@@ -134,15 +87,8 @@ export async function addProjectMember(projectId: string, userId: string): Promi
 }
 
 export async function removeProjectMember(projectId: string, userId: string): Promise<void> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) throw new Error('Not authenticated');
-
-  const response = await fetch(`${API_URL}/projects/${projectId}/members/${userId}`, {
+  const response = await apiFetch(`/projects/${projectId}/members/${userId}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to remove member');
@@ -157,20 +103,9 @@ export type ProjectsScope = 'all' | 'uploadable';
 
 export const projectsService = {
   async listProjects(scope: ProjectsScope = 'all'): Promise<Project[]> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
     const params = new URLSearchParams({ scope });
 
-    const response = await fetch(`${API_URL}/projects?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`/projects?${params.toString()}`, { method: 'GET' });
 
     if (!response.ok) {
       throw new Error('Failed to fetch projects');

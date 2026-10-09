@@ -89,12 +89,7 @@ export function AppShell({ children }: AppShellProps) {
   const isAdminPage = location.pathname.startsWith('/admin');
   const isSearchPage = location.pathname.startsWith('/search');
 
-  const [userState, setUserState] = useState<CurrentUserState>(() => {
-    if (typeof window !== 'undefined' && !sessionStorage.getItem('accessToken')) {
-      return { status: 'error' };
-    }
-    return { status: 'loading' };
-  });
+  const [userState, setUserState] = useState<CurrentUserState>({ status: 'loading' });
   const [statusCounts, setStatusCounts] = useState<DocumentStatusCounts | null>(null);
 
   const urlQuery = isSearchPage ? (searchParams.get('q') ?? '') : null;
@@ -130,17 +125,9 @@ export function AppShell({ children }: AppShellProps) {
   useEffect(() => {
     isMountedRef.current = true;
     let isActive = true;
-    const accessToken = sessionStorage.getItem('accessToken');
-
-    if (!accessToken) {
-      return () => {
-        isActive = false;
-        isMountedRef.current = false;
-      };
-    }
 
     authService
-      .getMe(accessToken)
+      .getMe()
       .then((user) => {
         if (!isActive) return;
         setUserState({ status: 'ready', user });
@@ -157,11 +144,8 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const refreshCurrentUser = async () => {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) return;
-
     try {
-      const user = await authService.getMe(accessToken);
+      const user = await authService.getMe();
       if (isMountedRef.current) {
         setUserState({ status: 'ready', user });
       }

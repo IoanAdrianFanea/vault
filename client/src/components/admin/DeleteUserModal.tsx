@@ -57,11 +57,8 @@ export function DeleteUserModal({
       message={
         <div>
           <p>
-            Delete {displayName}? Their account{' '}
-            <strong className="font-semibold text-ink">
-              and every document they uploaded
-            </strong>{' '}
-            will be permanently deleted. This can't be undone.
+            Delete {displayName}? They'll lose access straight away. Documents they
+            uploaded stay in the register.
           </p>
           {error && (
             <InlineAlert tone="error" className="mt-3">

@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch } from './http';
 
 export type FilterType = 'TEXT' | 'NUMBER' | 'DATE';
 
@@ -13,21 +13,10 @@ export interface FilterDefinition {
   updatedAt: string;
 }
 
-function authHeaders(): Record<string, string> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-  return { Authorization: `Bearer ${accessToken}` };
-}
-
 export const filtersService = {
   /** Available to any authenticated user — filters power the upload form and document list for everyone. */
   async listFilters(): Promise<FilterDefinition[]> {
-    const response = await fetch(`${API_URL}/filters`, {
-      headers: authHeaders(),
-      credentials: 'include',
-    });
+    const response = await apiFetch('/filters');
 
     if (!response.ok) {
       throw new Error('Failed to fetch filters');
@@ -38,10 +27,9 @@ export const filtersService = {
 
   /** ADMIN ONLY */
   async createFilter(name: string, type: FilterType): Promise<FilterDefinition> {
-    const response = await fetch(`${API_URL}/filters`, {
+    const response = await apiFetch('/filters', {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, type }),
     });
 
@@ -58,10 +46,9 @@ export const filtersService = {
     id: string,
     payload: { name?: string; type?: FilterType },
   ): Promise<FilterDefinition> {
-    const response = await fetch(`${API_URL}/filters/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/filters/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
@@ -75,10 +62,8 @@ export const filtersService = {
 
   /** ADMIN ONLY */
   async deleteFilter(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/filters/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/filters/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: authHeaders(),
-      credentials: 'include',
     });
 
     if (!response.ok) {

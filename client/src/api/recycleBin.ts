@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch } from './http';
 
 export interface DeletedDocument {
   id: string;
@@ -14,14 +14,6 @@ export interface DeletedDocument {
   retentionDays: number;
   restorable: boolean;
   requiresProjectChoice: boolean;
-}
-
-function authHeaders(): Record<string, string> {
-  const accessToken = sessionStorage.getItem('accessToken');
-  if (!accessToken) {
-    throw new Error('Not authenticated');
-  }
-  return { Authorization: `Bearer ${accessToken}` };
 }
 
 export interface DeletedProject {
@@ -42,10 +34,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 }
 
 export async function getDeletedDocuments(): Promise<DeletedDocument[]> {
-  const response = await fetch(`${API_URL}/recycle-bin`, {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
+  const response = await apiFetch('/recycle-bin');
 
   if (!response.ok) {
     throw new Error(await readError(response, 'Failed to load the recycle bin'));
@@ -55,10 +44,7 @@ export async function getDeletedDocuments(): Promise<DeletedDocument[]> {
 }
 
 export async function getDeletedProjects(): Promise<DeletedProject[]> {
-  const response = await fetch(`${API_URL}/recycle-bin/projects`, {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
+  const response = await apiFetch('/recycle-bin/projects');
 
   if (!response.ok) {
     throw new Error(await readError(response, 'Failed to load deleted projects'));
@@ -68,12 +54,8 @@ export async function getDeletedProjects(): Promise<DeletedProject[]> {
 }
 
 export async function getDeletedProjectDocuments(projectId: string): Promise<DeletedDocument[]> {
-  const response = await fetch(
-    `${API_URL}/recycle-bin/projects/${encodeURIComponent(projectId)}/documents`,
-    {
-      headers: authHeaders(),
-      credentials: 'include',
-    },
+  const response = await apiFetch(
+    `/recycle-bin/projects/${encodeURIComponent(projectId)}/documents`,
   );
 
   if (!response.ok) {
@@ -84,14 +66,9 @@ export async function getDeletedProjectDocuments(projectId: string): Promise<Del
 }
 
 export async function restoreProject(id: string): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/recycle-bin/projects/${encodeURIComponent(id)}/restore`,
-    {
-      method: 'POST',
-      headers: authHeaders(),
-      credentials: 'include',
-    },
-  );
+  const response = await apiFetch(`/recycle-bin/projects/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+  });
 
   if (!response.ok) {
     throw new Error(await readError(response, 'Failed to restore project'));
@@ -99,10 +76,8 @@ export async function restoreProject(id: string): Promise<void> {
 }
 
 export async function permanentlyDeleteProject(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/recycle-bin/projects/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/recycle-bin/projects/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
-    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -111,10 +86,9 @@ export async function permanentlyDeleteProject(id: string): Promise<void> {
 }
 
 export async function restoreDocument(id: string, targetProjectId?: string): Promise<void> {
-  const response = await fetch(`${API_URL}/recycle-bin/${encodeURIComponent(id)}/restore`, {
+  const response = await apiFetch(`/recycle-bin/${encodeURIComponent(id)}/restore`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(targetProjectId ? { targetProjectId } : {}),
   });
 
@@ -124,10 +98,8 @@ export async function restoreDocument(id: string, targetProjectId?: string): Pro
 }
 
 export async function permanentlyDeleteDocument(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/recycle-bin/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`/recycle-bin/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
-    credentials: 'include',
   });
 
   if (!response.ok) {

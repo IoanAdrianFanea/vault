@@ -9,6 +9,7 @@ import Upload from './pages/Upload';
 import Jobs from './pages/Jobs';
 import Search from './pages/Search';
 import { AppShell } from './components/layout/AppShell';
+import { RequireAuth } from './components/layout/RequireAuth';
 import { authService } from './api/auth';
 import AdminProjects from './pages/admin/AdminProjects';
 import AdminUsers from './pages/admin/AdminUsers';
@@ -24,23 +25,14 @@ interface AdminGuardProps {
 }
 
 function AdminGuard({ children }: AdminGuardProps) {
-  const [isChecking, setIsChecking] = useState(() =>
-    Boolean(sessionStorage.getItem('accessToken')),
-  );
+  const [isChecking, setIsChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let isActive = true;
-    const accessToken = sessionStorage.getItem('accessToken');
-
-    if (!accessToken) {
-      return () => {
-        isActive = false;
-      };
-    }
 
     authService
-      .getMe(accessToken)
+      .getMe()
       .then((user) => {
         if (!isActive) return;
         setIsAdmin(user.role === 'ADMIN');
@@ -76,72 +68,95 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/change-password" element={<ChangePassword />} />
+        <Route
+          path="/change-password"
+          element={
+            <RequireAuth>
+              <ChangePassword />
+            </RequireAuth>
+          }
+        />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route
           path="/search"
           element={
-            <AppShell>
-              <Search />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Search />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/search/:id"
           element={
-            <AppShell>
-              <Search />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Search />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/upload"
           element={
-            <AppShell>
-              <Upload />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Upload />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/documents"
           element={
-            <AppShell>
-              <Documents />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Documents />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/documents/:id"
           element={
-            <AppShell>
-              <Documents />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Documents />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/jobs"
           element={
-            <AppShell>
-              <Jobs />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Jobs />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/jobs/:id"
           element={
-            <AppShell>
-              <Jobs />
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <Jobs />
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/admin"
           element={
-            <AdminGuard>
-              <AppShell>
-                <AdminLayout />
-              </AppShell>
-            </AdminGuard>
+            <RequireAuth>
+              <AdminGuard>
+                <AppShell>
+                  <AdminLayout />
+                </AppShell>
+              </AdminGuard>
+            </RequireAuth>
           }
         >
           <Route index element={<Navigate to="/admin/projects" replace />} />
@@ -152,7 +167,14 @@ function App() {
           <Route path="archive" element={<AdminArchive />} />
           <Route path="filters" element={<AdminFilters />} />
         </Route>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <Navigate to="/documents" replace />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

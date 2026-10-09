@@ -10,12 +10,21 @@ Potential additions and improvements for future consideration.
 - ~~Custom filters: available to all users vs creator-only~~ — **decided and implemented**: available to all users once created (`GET /filters` requires only authentication); only admins can create/edit/delete
 - ~~Compression threshold (suggested 5MB)~~ — **decided and implemented**: 5MB threshold (`COMPRESSION_THRESHOLD_BYTES`) and 10% minimum savings ratio (`COMPRESSION_MIN_SAVINGS_RATIO`), both configurable via environment
 - ~~Password policy specifics~~ — **decided and implemented**: min 10 chars, one uppercase, one lowercase, one digit, one special character
-- Upload size limit: Phase 2 calls for removing the 50MB cap entirely — confirm there should be no ceiling at all before removing it
+- ~~Upload size limit~~ — **decided and implemented**: 50 MB by default, configurable with `MAX_UPLOAD_MB`
 - Storage usage indicator in the sidebar — only if the stakeholder asks for it
 
 ---
 
 ## Resolved
+
+### User Deletion Cascades to Uploaded Documents — done in Phase 4.5
+Documents are preserved with `uploadedById: null` and an immutable `uploadedByEmail` snapshot; user deletion keeps files and metadata intact.
+
+### Refresh Token Lookup — done in Phase 4.5
+Refresh tokens are tracked by JWT ID (`jti`) session lookup supporting concurrent multi-device sessions.
+
+### Protect Admin Accounts From Deletion — done in Phase 4.5
+Admins cannot delete their own account or the last active admin account (returns HTTP 409).
 
 ### Force Password Reset on First Login — done
 `mustChangePassword` exists on `User`, is set by `POST /users` and by an admin-set password via `PATCH /users/:id`, is returned from `POST /auth/login`, and the client routes to `/change-password`. Cleared on successful password change.
@@ -25,9 +34,9 @@ Remove `language` and `timezone` from the `User` schema. Stakeholder confirmed a
 
 ---
 
-## Email Verification Token Expiry
+## Verification Email Resend and Token Expiry
 
-The verification email states the link is valid for 24 hours, but no expiry is stored or checked — `emailVerificationToken` is a bare hash column on `User`. Either add an `emailVerificationExpiresAt` column, or promote this to the originally planned `EmailVerification` table if password-reset tokens are also needed.
+There is currently no way to resend a verification email if the original message is lost or undelivered. Additionally, the verification email states the link is valid for 24 hours, but no expiry is stored or checked — `emailVerificationToken` is a bare hash column on `User`. Either add an `emailVerificationExpiresAt` column, or promote this to the originally planned `EmailVerification` table if password-reset tokens are also needed.
 
 ---
 
@@ -46,12 +55,6 @@ Every admin-only handler repeats an inline `req.user?.role !== 'ADMIN'` check, a
 ## Search Scalability
 
 `searchDocuments` loads every accessible document with extracted text into memory before filtering in JavaScript. `listDocuments` is capped at 50 rows with no pagination. Both need a SQL-side rewrite (SQLite FTS5, or Postgres full-text if the database moves) before real data volumes.
-
----
-
-## Refresh Token Lookup
-
-`AuthService.refresh` finds the most recent non-revoked token for the user and verifies the presented token against it, rather than looking up the presented token directly. Signing in on a second device therefore invalidates the first device's refresh token. Store a lookup-friendly hash and match on it.
 
 ---
 
@@ -75,7 +78,13 @@ Implemented in `ProjectsService.getProject`. Kept in the backlog only as a note 
 
 ## Restrict Self-Registration
 
-`POST /auth/register` is public, but accounts now land in `PENDING` and require both email verification and admin approval, so the exposure is limited. Optionally disable the endpoint entirely for closed-deployment customers.
+`POST /auth/register` is public, but accounts now land in `PENDING` and require both email verification and admin approval, so the exposure is limited. Note that registration cannot complete while SMTP is unconfigured (RQ4). Optionally disable the endpoint entirely for closed-deployment customers.
+
+---
+
+## Offsite Backups (Automatic)
+
+Nightly database backup copies stay on the Render persistent disk. Copy them off automatically to separate storage (e.g. S3 or OneDrive).
 
 ---
 
@@ -143,12 +152,6 @@ There's no "forgot password" flow. The link was removed from the sign-in page be
 
 ---
 
-## User Deletion Cascades to Uploaded Documents
-
-`Document.uploadedBy` uses `onDelete: Cascade`, so deleting a user permanently deletes every document they uploaded, with no recycle bin and no deletion log. The UI warns about it. Likely fix: make `uploadedById` nullable with `onDelete: SetNull`, or deactivate users instead of deleting them.
-
----
-
 ## Project and Uploader on GET /documents/:id
 
 The endpoint returns neither `projectName` nor `uploadedByEmail`, so the Search drawer can't show them (they're only on list rows).
@@ -159,8 +162,3 @@ The endpoint returns neither `projectName` nor `uploadedByEmail`, so the Search 
 
 `searchDocuments` wraps unescaped file names and text in `<mark>` tags. The client now renders them safely, but the API should HTML-escape the text around the tags.
 
----
-
-## Protect Admin Accounts From Deletion
-
-`DELETE /users/:id` lets an admin delete their own account or the last admin. Reject both.

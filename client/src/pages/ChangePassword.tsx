@@ -27,15 +27,9 @@ export default function ChangePassword() {
       return;
     }
 
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      navigate('/login');
-      return;
-    }
-
     setIsLoading(true);
     try {
-      await authService.changePassword(accessToken, currentPassword, newPassword);
+      await authService.changePassword(currentPassword, newPassword);
       navigate('/documents');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change password');

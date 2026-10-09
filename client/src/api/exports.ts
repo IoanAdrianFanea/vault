@@ -1,6 +1,5 @@
 import { getFilenameFromContentDisposition } from '../utils/contentDisposition';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch } from './http';
 
 export interface DocumentBlobPayload {
   blob: Blob;
@@ -11,17 +10,7 @@ export interface DocumentBlobPayload {
  * Fetch a single document as blob payload.
  */
 export async function getDocumentBlob(documentId: string): Promise<DocumentBlobPayload> {
-  const token = sessionStorage.getItem('accessToken');
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${API_URL}/documents/${documentId}/download`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await apiFetch(`/documents/${documentId}/download`, { method: 'GET' });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Download failed' }));
@@ -63,16 +52,10 @@ export async function downloadDocument(documentId: string): Promise<void> {
  * Export multiple documents as ZIP
  */
 export async function exportDocuments(documentIds: string[]): Promise<void> {
-  const token = sessionStorage.getItem('accessToken');
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
-
   try {
-    const response = await fetch(`${API_URL}/exports`, {
+    const response = await apiFetch('/exports', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ documentIds }),

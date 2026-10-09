@@ -1,5 +1,4 @@
-// API base URL - backend runs on port 3000
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch } from './http';
 
 // Auth API response types
 export interface LoginResponse {
@@ -35,12 +34,12 @@ export const authService = {
    * @throws Error with message if registration fails
    */
   async register(email: string, password: string, fullName?: string): Promise<RegisterResponse> {
-    const response = await fetch(`${API_URL}/auth/register`, {
+    const response = await apiFetch('/auth/register', {
       method: 'POST',
+      auth: false,
       headers: {
         'Content-Type': 'application/json',
       },
-      credentials: 'include', // Important: allows HttpOnly cookies
       body: JSON.stringify({ email, password, ...(fullName ? { fullName } : {}) }),
     });
 
@@ -60,12 +59,12 @@ export const authService = {
    * @throws Error with message if login fails
    */
   async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await apiFetch('/auth/login', {
       method: 'POST',
+      auth: false,
       headers: {
         'Content-Type': 'application/json',
       },
-      credentials: 'include', // Important: allows HttpOnly cookies
       body: JSON.stringify({ email, password }),
     });
 
@@ -79,16 +78,9 @@ export const authService = {
 
   /**
    * Get current user information
-   * Requires valid accessToken
    */
-  async getMe(accessToken: string): Promise<User> {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+  async getMe(): Promise<User> {
+    const response = await apiFetch('/auth/me', { method: 'GET' });
 
     if (!response.ok) {
       throw new Error('Failed to get user information');
@@ -101,14 +93,8 @@ export const authService = {
    * Logout user
    * Revokes refresh tokens on the backend
    */
-  async logout(accessToken: string): Promise<void> {
-    const response = await fetch(`${API_URL}/auth/logout`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+  async logout(): Promise<void> {
+    const response = await apiFetch('/auth/logout', { method: 'POST' });
 
     if (!response.ok) {
       throw new Error('Logout failed');
@@ -119,14 +105,12 @@ export const authService = {
    * PATCH /auth/me - Update user profile information
    * @throws Error with message if update fails
    */
-  async updateMe(accessToken: string, profileData: UpdateMePayload): Promise<User> {
-    const response = await fetch(`${API_URL}/auth/me`, {
+  async updateMe(profileData: UpdateMePayload): Promise<User> {
+    const response = await apiFetch('/auth/me', {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
       },
-      credentials: 'include',
       body: JSON.stringify(profileData),
     });
 
@@ -143,18 +127,12 @@ export const authService = {
   /**
    * PATCH /auth/me/password - Change own password
    */
-  async changePassword(
-    accessToken: string,
-    currentPassword: string,
-    newPassword: string,
-  ): Promise<void> {
-    const response = await fetch(`${API_URL}/auth/me/password`, {
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const response = await apiFetch('/auth/me/password', {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
       },
-      credentials: 'include',
       body: JSON.stringify({ currentPassword, newPassword }),
     });
 
@@ -168,9 +146,9 @@ export const authService = {
    * GET /auth/verify-email?token=xxx — verify email from link in inbox
    */
   async verifyEmail(token: string): Promise<{ message: string }> {
-    const response = await fetch(
-      `${API_URL}/auth/verify-email?token=${encodeURIComponent(token)}`,
-      { method: 'GET' },
+    const response = await apiFetch(
+      `/auth/verify-email?token=${encodeURIComponent(token)}`,
+      { method: 'GET', auth: false },
     );
 
     const data = await response.json().catch(() => ({ message: 'Unknown error' }));

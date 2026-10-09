@@ -1,7 +1,5 @@
 import type { FilterType } from './filters';
-
-// API base URL from environment variable
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiFetch } from './http';
 
 export type DocumentStatus = 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
 
@@ -91,11 +89,6 @@ export const documentsService = {
     projectId: string,
     filterValues?: Record<string, string>,
   ): Promise<UploadResponse> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('projectId', projectId);
@@ -103,25 +96,15 @@ export const documentsService = {
       formData.append('filterValues', JSON.stringify(filterValues));
     }
 
-    const response = await fetch(`${API_URL}/documents/upload`, {
+    const response = await apiFetch('/documents/upload', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
       body: formData,
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('Authentication required');
-      }
       if (response.status === 400) {
         const error = await response.json().catch(() => ({ message: 'Invalid file' }));
         throw new Error(error.message || 'Invalid file');
-      }
-      if (response.status === 413) {
-        throw new Error('The file is too large to upload.');
       }
       const error = await response.json().catch(() => ({ message: 'Upload failed' }));
       throw new Error(error.message || 'Upload failed');
@@ -134,23 +117,12 @@ export const documentsService = {
    * Get all documents for current user
    */
   async listDocuments(filters?: ListDocumentsFilters): Promise<Document[]> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
     const params = buildListDocumentsParams(filters, { includeStatusAndSort: true });
 
     const queryString = params.toString();
-    const url = queryString ? `${API_URL}/documents?${queryString}` : `${API_URL}/documents`;
+    const path = queryString ? `/documents?${queryString}` : '/documents';
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(path, { method: 'GET' });
 
     if (!response.ok) {
       throw new Error('Failed to fetch documents');
@@ -163,23 +135,12 @@ export const documentsService = {
    * Get document status counts
    */
   async getStatusCounts(filters?: ListDocumentsFilters): Promise<DocumentStatusCounts> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
     const params = buildListDocumentsParams(filters, { includeStatusAndSort: false });
 
     const queryString = params.toString();
-    const url = queryString ? `${API_URL}/documents/status-counts?${queryString}` : `${API_URL}/documents/status-counts`;
+    const path = queryString ? `/documents/status-counts?${queryString}` : '/documents/status-counts';
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(path, { method: 'GET' });
 
     if (!response.ok) {
       throw new Error('Failed to fetch status counts');
@@ -199,18 +160,7 @@ export const documentsService = {
    * Get a single document by ID
    */
   async getDocument(id: string): Promise<Document> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${API_URL}/documents/${id}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`/documents/${id}`, { method: 'GET' });
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -226,18 +176,7 @@ export const documentsService = {
    * Get extracted text for a document
    */
   async getDocumentText(id: string): Promise<DocumentText> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${API_URL}/documents/${id}/text`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`/documents/${id}/text`, { method: 'GET' });
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -253,19 +192,8 @@ export const documentsService = {
    * Search documents by filename and text content
    */
   async searchDocuments(query: string): Promise<{ results: SearchResult[] }> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
     const params = new URLSearchParams({ q: query });
-    const response = await fetch(`${API_URL}/documents/search?${params}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`/documents/search?${params}`, { method: 'GET' });
 
     if (!response.ok) {
       if (response.status === 400) {
@@ -282,18 +210,7 @@ export const documentsService = {
    * Delete a single document
    */
   async deleteDocument(id: string): Promise<{ success: boolean }> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${API_URL}/documents/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`/documents/${id}`, { method: 'DELETE' });
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -309,18 +226,11 @@ export const documentsService = {
    * Bulk delete multiple documents
    */
   async bulkDeleteDocuments(documentIds: string[]): Promise<{ deleted: number; failed: string[] }> {
-    const accessToken = sessionStorage.getItem('accessToken');
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${API_URL}/documents/bulk-delete`, {
+    const response = await apiFetch('/documents/bulk-delete', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      credentials: 'include',
       body: JSON.stringify({ documentIds }),
     });
 

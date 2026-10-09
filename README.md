@@ -73,14 +73,16 @@ Create `server/.env`:
 
 ```env
 DATABASE_URL="file:./dev.db"
+STORAGE_ROOT="./data"
 FRONTEND_URL="http://localhost:5173"
 
-JWT_ACCESS_SECRET="your-access-secret-here"
-JWT_REFRESH_SECRET="your-refresh-secret-here"
+# 32+ characters, different from each other
+JWT_ACCESS_SECRET=
+JWT_REFRESH_SECRET=
 JWT_ACCESS_TOKEN_EXPIRATION="15m"
 JWT_REFRESH_TOKEN_EXPIRATION="7d"
 
-# Optional — leave blank to log emails to the console instead of sending them
+# Optional — leave blank to log emails to the console instead of sending them (all or nothing)
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
@@ -149,21 +151,26 @@ Storage sits behind the `BlobStore` interface with a project-based layout (`acti
 
 | Variable | Location | Purpose |
 |---|---|---|
+| `NODE_ENV` | `server/.env` | Environment mode (`development`, `production`, `test`) |
 | `DATABASE_URL` | `server/.env` | SQLite file path |
-| `FRONTEND_URL` | `server/.env` | Base URL used in email links (CORS currently allows all localhost) |
-| `JWT_ACCESS_SECRET` | `server/.env` | Signs access tokens |
-| `JWT_REFRESH_SECRET` | `server/.env` | Signs refresh tokens |
+| `FRONTEND_URL` | `server/.env` | Site origin, used for CORS in production and email links |
+| `JWT_ACCESS_SECRET` | `server/.env` | Signs access tokens (32+ chars) |
+| `JWT_REFRESH_SECRET` | `server/.env` | Signs refresh tokens (32+ chars, different from access secret) |
 | `JWT_ACCESS_TOKEN_EXPIRATION` | `server/.env` | Access token TTL (e.g. `15m`) |
 | `JWT_REFRESH_TOKEN_EXPIRATION` | `server/.env` | Refresh token TTL (e.g. `7d`) |
-| `SMTP_HOST` | `server/.env` | SMTP server. If host/user/pass are blank, emails are logged to the console |
-| `SMTP_PORT` | `server/.env` | SMTP port (`465` implies SSL, otherwise STARTTLS) |
-| `SMTP_USER` | `server/.env` | SMTP username |
-| `SMTP_PASS` | `server/.env` | SMTP password |
-| `SMTP_FROM` | `server/.env` | From address on outgoing mail |
+| `MAX_UPLOAD_MB` | `server/.env` | Maximum upload size in MB (default: `50`) |
 | `STORAGE_ROOT` | `server/.env` | Root directory for file storage (default: `./data`) |
+| `BACKUP_DIR` | `server/.env` | Directory for database backups (default: `STORAGE_ROOT/backups`) |
+| `BACKUP_KEEP` | `server/.env` | Number of automatic backup copies to keep (default: `14`) |
+| `SMTP_HOST` | `server/.env` | SMTP server (all or nothing) |
+| `SMTP_PORT` | `server/.env` | SMTP port (`465` implies SSL, otherwise STARTTLS) (all or nothing) |
+| `SMTP_USER` | `server/.env` | SMTP username (all or nothing) |
+| `SMTP_PASS` | `server/.env` | SMTP password (all or nothing) |
+| `SMTP_FROM` | `server/.env` | From address on outgoing mail (all or nothing) |
 | `COMPRESSION_THRESHOLD_BYTES` | `server/.env` | Files larger than this in bytes are evaluated for compression (default: `5242880` = 5MB) |
 | `COMPRESSION_MIN_SAVINGS_RATIO` | `server/.env` | Minimum ratio savings needed to keep compressed file (default: `0.1` = 10%) |
 | `VITE_API_URL` | `client/.env.local` | Backend base URL |
+| `VITE_MAX_UPLOAD_MB` | `client/.env.local` | Maximum upload file size in MB for client-side validation |
 
 ---
 
@@ -184,7 +191,7 @@ Account lifecycle:
 4. An admin approves in `/admin/pending` → `accountStatus` becomes `ACTIVE`
 5. Login is only permitted once **both** steps are complete
 
-Admin-created users (`POST /users`) are `ACTIVE` immediately and are forced to change their temporary password on first login.
+Admin-created users (`POST /users`) count as verified, are `ACTIVE` immediately and are forced to change their temporary password on first login. Only an `ACTIVE` account can use the app.
 
 Password policy: at least 10 characters with an uppercase letter, a lowercase letter, a digit and a special character.
 
@@ -210,7 +217,7 @@ Password policy: at least 10 characters with an uppercase letter, a lowercase le
 | `GET /projects/:id/members` | JWT + ADMIN | Lists members |
 | `POST /projects/:id/members` | JWT + ADMIN | Adds a member |
 | `DELETE /projects/:id/members/:userId` | JWT + ADMIN | Removes a member |
-| `POST /documents/upload` | JWT | Uploads PDF/JPEG/PNG (no size limit), extracts PDF text, links to project |
+| `POST /documents/upload` | JWT | Uploads PDF/JPEG/PNG up to `MAX_UPLOAD_MB` (413 if larger, 400 if the content doesn't match), extracts PDF text, links to project |
 | `GET /documents` | JWT | Lists documents with filters and sorting (max 50) |
 | `GET /documents/status-counts` | JWT | Document counts grouped by status |
 | `GET /documents/search` | JWT | Full-text search with snippets (`?q=query`, max 20) |
@@ -234,6 +241,8 @@ Password policy: at least 10 characters with an uppercase letter, a lowercase le
 | `POST /users/:id/role` | JWT + ADMIN | Sets user role |
 | `DELETE /users/:id` | JWT + ADMIN | Deletes a user |
 
+Login, register, verify-email and refresh are rate-limited (429).
+
 All document reads and exports are project-scoped: non-admins only ever see documents from projects they are a member of. Soft-deleted documents are hidden from every read path and are only visible in the recycle bin.
 
 ---
@@ -244,11 +253,13 @@ See `docs/project-plan.md` for full detail.
 
 **Phase 1 – Core Operational MVP** — complete.
 
-**Phase 2 – Access, Admin Console & Auditability** — complete. Admin console, project-scoped visibility (documents and projects), the registration/approval lifecycle, self-service email change, delete logging, soft delete with the 30-day recycle bin and its scheduled purge are all in place, and the 50MB upload limit has been removed.
+**Phase 2 – Access, Admin Console & Auditability** — complete. Admin console, project-scoped visibility (documents and projects), the registration/approval lifecycle, self-service email change, delete logging, soft delete with the 30-day recycle bin and its scheduled purge are all in place, and the 50MB upload limit has been removed (reinstated as a configurable limit in Phase 4.5).
 
 **Phase 3 – Custom Filters & Search** — complete. Admin-configurable metadata fields (`/admin/filters`), search + filter combined, and OCR extraction for images.
 
 **Phase 4 – Project Archive & Storage Structure** — complete. Dedicated archive page (`/admin/archive`), project zip creation/extraction, recycle-bin integration, transparent file compression, and project-based storage structure.
+
+**Phase 4.5 – Pilot readiness** — in progress (Groups A–C complete). Deployment hardening, automated backups, restore hook, security headers, rate limits, upload bounds, and deployment documentation. See [docs/deploy.md](docs/deploy.md).
 
 **Phases 5–7** — not started. The `/jobs` page is a static mock preview of Phase 6.
 

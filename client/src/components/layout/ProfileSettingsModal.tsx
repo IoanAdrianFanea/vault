@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, type UpdateMePayload } from '../../api/auth';
+import { clearAccessToken } from '../../api/http';
 import {
   Badge,
   Button,
@@ -79,19 +80,13 @@ export function ProfileSettingsModal({
     }
 
     let cancelled = false;
-    const token = sessionStorage.getItem('accessToken');
-
-    if (!token) {
-      setProfileError('You are not authenticated. Please sign in again.');
-      return;
-    }
 
     setIsLoadingProfile(true);
     setProfileError('');
     setProfileSuccess('');
 
     authService
-      .getMe(token)
+      .getMe()
       .then((user) => {
         if (cancelled) return;
         const name = user.fullName ?? '';
@@ -131,12 +126,6 @@ export function ProfileSettingsModal({
   };
 
   const handleSaveProfile = async () => {
-    const token = sessionStorage.getItem('accessToken');
-    if (!token) {
-      setProfileError('You are not authenticated. Please sign in again.');
-      return;
-    }
-
     setProfileError('');
     setProfileSuccess('');
 
@@ -164,7 +153,7 @@ export function ProfileSettingsModal({
     setIsSavingProfile(true);
 
     try {
-      const updated = await authService.updateMe(token, payload);
+      const updated = await authService.updateMe(payload);
       const updatedName = updated.fullName ?? '';
       const updatedEmail = updated.email ?? '';
 
@@ -204,16 +193,10 @@ export function ProfileSettingsModal({
       return;
     }
 
-    const token = sessionStorage.getItem('accessToken');
-    if (!token) {
-      setPwError('Not authenticated.');
-      return;
-    }
-
     setIsChangingPw(true);
 
     try {
-      await authService.changePassword(token, currentPw, newPw);
+      await authService.changePassword(currentPw, newPw);
       setPwSuccess('Password changed successfully.');
       setCurrentPw('');
       setNewPw('');
@@ -227,15 +210,12 @@ export function ProfileSettingsModal({
   };
 
   const handleSignOut = async () => {
-    const token = sessionStorage.getItem('accessToken');
-    if (token) {
-      try {
-        await authService.logout(token);
-      } catch {
-        // Ignore logout error
-      }
+    try {
+      await authService.logout();
+    } catch {
+      /* ignore */
     }
-    sessionStorage.removeItem('accessToken');
+    clearAccessToken();
     onClose();
     navigate('/login');
   };
