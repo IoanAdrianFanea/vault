@@ -1,164 +1,56 @@
 # Backlog
 
-Potential additions and improvements for future consideration.
+Open items only. Each one was checked against the current code.
 
----
+## To confirm with the stakeholder
 
-## To Confirm With Stakeholder
+- **Project-scoped visibility:** non-admins only see their own projects. It is implemented, but not formally signed off.
+- **Storage usage indicator in the sidebar:** only if the stakeholder asks for it.
 
-- Project-scoped visibility (non-admins see only assigned projects) — **implemented in code**, still needs explicit sign-off
-- ~~Custom filters: available to all users vs creator-only~~ — **decided and implemented**: available to all users once created (`GET /filters` requires only authentication); only admins can create/edit/delete
-- ~~Compression threshold (suggested 5MB)~~ — **decided and implemented**: 5MB threshold (`COMPRESSION_THRESHOLD_BYTES`) and 10% minimum savings ratio (`COMPRESSION_MIN_SAVINGS_RATIO`), both configurable via environment
-- ~~Password policy specifics~~ — **decided and implemented**: min 10 chars, one uppercase, one lowercase, one digit, one special character
-- ~~Upload size limit~~ — **decided and implemented**: 50 MB by default, configurable with `MAX_UPLOAD_MB`
-- Storage usage indicator in the sidebar — only if the stakeholder asks for it
+## Manual checks
 
----
+- **Re-run the access scenarios against project-scoped visibility:** sign in as a user who belongs to Project A only, with one document in each of Projects A and B. The document list, search and status counts must show only A. `GET /documents/:id`, `/text` and `/download` for the B document must return 404, and `POST /exports` including it must return 404 and export nothing. Also check that a user outside a project can't upload to it and that an admin sees everything.
+
+## Accounts and security
+
+- **Verification email expiry and resend:** the email says the link is valid for 24 hours, but no expiry is stored or checked, and a lost email can't be resent. Add an expiry column, or an `EmailVerification` table if password-reset tokens are also needed.
+- **Password reset:** there is no forgot-password flow.
+- **Restrict self-registration:** `POST /auth/register` is public. Accounts need verification and approval, and registration can't complete without SMTP. Optionally allow switching it off for closed deployments.
+- **Shared admin guard:** every admin-only handler repeats an inline role check, and `UsersController` throws `BadRequestException` in some places and `ForbiddenException` in others. A `@Roles('ADMIN')` decorator with a guard would remove the duplication and make responses consistent.
+- **Unused user fields:** remove `language` and `timezone` from `User`. Nothing reads them.
+
+## Documents and search
+
+- **Search scalability:** `searchDocuments` loads every accessible document with text into memory and filters in JavaScript, returning 20 results. It needs a database-side rewrite (SQLite FTS5) before real data volumes.
+- **Pagination:** `GET /documents` returns at most 50 rows. The page says so, but offers no way to see more.
+- **Escape search snippets on the server:** the API wraps unescaped file names and text in `<mark>` tags. The client renders them safely, but the API should HTML-escape the text around the tags.
+- **Uploader on `GET /documents/:id`:** the response has `projectName` but not `uploadedByEmail`, so the Search drawer can't show who uploaded a document.
+- **Edit custom filter values after upload:** values are entered once, at upload.
+- **Custom filter values as table columns:** show them as optional columns in the Documents table.
+- **Retry processing endpoint:** re-run extraction for a `FAILED` document. The Retry action in the Documents table is a `TODO(backend)` handler.
+- **Register PDF export:** render the filtered document register as a PDF. "Generate register PDF" in the export menu is a `TODO(backend)` handler.
+- **New project members:** `POST /projects` creates a project with no members. Consider adding the creating admin, or making the next step clearer in the UI.
+
+## Operations
+
+- **Automatic offsite backups:** nightly database copies stay on the persistent disk, and copying them off is manual. Planned for Phase 5.
+- **Print document button:** print with a preview. Low priority, Phase 5 if time allows.
+
+## Phase 7 ideas
+
+- Email attachment ingestion: forward an email to a project address and upload the attachments automatically.
+- Offline-friendly viewing: cache recently viewed documents.
+- A single native app for laptop, tablet and phone, to be evaluated once the web app is stable.
 
 ## Resolved
 
-### User Deletion Cascades to Uploaded Documents — done in Phase 4.5
-Documents are preserved with `uploadedById: null` and an immutable `uploadedByEmail` snapshot; user deletion keeps files and metadata intact.
-
-### Refresh Token Lookup — done in Phase 4.5
-Refresh tokens are tracked by JWT ID (`jti`) session lookup supporting concurrent multi-device sessions.
-
-### Protect Admin Accounts From Deletion — done in Phase 4.5
-Admins cannot delete their own account or the last active admin account (returns HTTP 409).
-
-### Force Password Reset on First Login — done
-`mustChangePassword` exists on `User`, is set by `POST /users` and by an admin-set password via `PATCH /users/:id`, is returned from `POST /auth/login`, and the client routes to `/change-password`. Cleared on successful password change.
-
-### Language and Timezone Fields — still open
-Remove `language` and `timezone` from the `User` schema. Stakeholder confirmed a single language is needed — these fields remain writable via `PATCH /auth/me` but are never read anywhere.
-
----
-
-## Verification Email Resend and Token Expiry
-
-There is currently no way to resend a verification email if the original message is lost or undelivered. Additionally, the verification email states the link is valid for 24 hours, but no expiry is stored or checked — `emailVerificationToken` is a bare hash column on `User`. Either add an `emailVerificationExpiresAt` column, or promote this to the originally planned `EmailVerification` table if password-reset tokens are also needed.
-
----
-
-## Full Name on Self-Registration
-
-The Register page renders a full-name input, but `handleSubmit` only sends email and password and `UsersService.create` hard-codes `fullName: ''`. Either send it through `RegisterDto` or remove the field from the form.
-
----
-
-## Consolidate Admin Role Checks
-
-Every admin-only handler repeats an inline `req.user?.role !== 'ADMIN'` check, and `UsersController` throws `BadRequestException` in some places and `ForbiddenException` in others for the same condition. A shared `@Roles('ADMIN')` decorator plus `RolesGuard` would remove the duplication and make the responses consistent.
-
----
-
-## Search Scalability
-
-`searchDocuments` loads every accessible document with extracted text into memory before filtering in JavaScript. `listDocuments` is capped at 50 rows with no pagination. Both need a SQL-side rewrite (SQLite FTS5, or Postgres full-text if the database moves) before real data volumes.
-
----
-
-## Print Document Button
-
-Add a print button in the document actions section, with a preview. Low priority — included in Phase 5 if time allows, otherwise moves here.
-
----
-
-## GET /projects/:id
-
-Implemented in `ProjectsService.getProject`. Kept in the backlog only as a note that the admin console currently uses `GET /projects` plus `GET /projects/:id/members` instead.
-
----
-
-## Project Creator Auto-Membership
-
-`POST /projects` creates a project with zero members. Consider auto-adding the creating admin, or making it explicit in the UI that members must be added before the project is usable.
-
----
-
-## Restrict Self-Registration
-
-`POST /auth/register` is public, but accounts now land in `PENDING` and require both email verification and admin approval, so the exposure is limited. Note that registration cannot complete while SMTP is unconfigured (RQ4). Optionally disable the endpoint entirely for closed-deployment customers.
-
----
-
-## Offsite Backups (Automatic)
-
-Nightly database backup copies stay on the Render persistent disk. Copy them off automatically to separate storage (e.g. S3 or OneDrive).
-
----
-
-## Email Attachment Ingestion
-
-Forward an email with attachments to a project-specific address; attachments uploaded automatically. Phase 7.
-
----
-
-## Offline-Friendly Viewing
-
-Cache recently viewed documents for offline access. Phase 7.
-
----
-
-## Native App for All Platforms
-
-Single app for laptop, tablet, and phone. To be evaluated after web is stable. Phase 7.
-
----
-
-## Storage Limits per User or Project
-
-Originally considered but removed — stakeholder confirmed no upload quotas. Could be reintroduced if cloud costs become a concern.
-
----
-
-## Permanent Project Deletion Cascade
-
-Permanent deletion (after 30-day window or via admin override) cascades:
-- All documents permanently removed
-- All deletion logs retained
-- ProjectMembership rows removed
-- DocumentFilterValue rows removed
-
----
-
-## Retry Processing Endpoint
-
-An endpoint to re-run text extraction for a FAILED document. The Documents table's "Retry" action is wired to a `TODO(backend)` handler.
-
----
-
-## Register PDF Export
-
-An endpoint that renders the filtered document register as a PDF. "Generate register PDF" in the Documents export menu is a `TODO(backend)` handler.
-
----
-
-## Custom Filter Values as Table Columns
-
-Show custom filter values as optional columns in the Documents table.
-
----
-
-## Document List Pagination
-
-`GET /documents` is capped at 50 rows. The page says "Showing the first 50 documents — narrow with filters". Add pagination or infinite scroll.
-
----
-
-## Password Reset Flow
-
-There's no "forgot password" flow. The link was removed from the sign-in page because it did nothing.
-
----
-
-## Uploader on GET /documents/:id
-
-The endpoint returns `projectName` but not `uploadedByEmail`, so the Search drawer can't show the uploader (it's only on list rows).
-
----
-
-## Escape Search Snippets Server-Side
-
-`searchDocuments` wraps unescaped file names and text in `<mark>` tags. The client now renders them safely, but the API should HTML-escape the text around the tags.
-
+- **User deletion kept uploaded documents:** documents stay with `uploadedById` set to null and a stored copy of the uploader's email and name (Phase 4.5).
+- **Refresh token lookup:** tokens are looked up by session id (`jti`), so several devices can stay signed in (Phase 4.5).
+- **Admin account protection:** admins can't delete, demote or deactivate themselves, or remove the last active admin (409) (Phase 4.5).
+- **Upload size limit:** 50 MB by default, set with `MAX_UPLOAD_MB`, with a file content check (Phase 4.5).
+- **Forced password change on first sign-in:** `mustChangePassword` is set for admin-created users and after an admin sets a password.
+- **Full name on self-registration:** the Register page sends it and the server stores it.
+- **Custom filter access:** any signed-in user can read the filters. Only admins can manage them.
+- **Compression thresholds:** 5 MB and a 10% minimum saving, both configurable.
+- **Password policy:** 10 or more characters with an uppercase letter, a lowercase letter, a number and a special character.
+- **Project list scoping:** `GET /projects` returns only a member's projects, and admins see all.

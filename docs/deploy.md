@@ -1,164 +1,131 @@
-# Deployment Guide
+# Deployment guide
 
-This guide covers deploying, maintaining, backing up, and restoring the Vault application on Render.
+How to deploy, back up and restore the app on Render. For local setup, see the [README](../README.md).
 
-## 1. Overview
+## Overview
 
-- **Architecture:** One Render web service running NestJS, which also serves the built React client in production.
-- **Storage:** A persistent disk mounted at `/data`, holding the SQLite database, uploaded document files, and database backups.
-- **Single instance requirement:** The service must run as exactly one instance. Rate limits are in memory, scheduled background jobs run in-process, and Render persistent disks attach to a single instance.
+- One Render web service runs NestJS, which also serves the built React client in production. API routes sit under `/api`.
+- A persistent disk mounted at `/data` holds the SQLite database, uploaded files and database backups.
+- The service must run as exactly one instance. Rate limits are held in memory, the backup and purge jobs run in-process, and a persistent disk attaches to a single instance.
 
-## 2. Render Settings
-
-Configure the web service in the Render dashboard with these settings:
+## Render settings
 
 | Setting | Value |
 |---|---|
-| **Root Directory** | `server` |
-| **Node Version** | Matches `.nvmrc` (v24) |
-| **Build Command** | `npm install --include=dev && npx prisma generate && npm run build:full` |
-| **Start Command** | `npm run start:render` |
-| **Disk Mount Path** | `/data` |
-| **Health Check Path** | `/` |
+| Root directory | `server` |
+| Node version | 20, matching `.nvmrc` |
+| Build command | `npm install --include=dev && npx prisma generate && npm run build:full` |
+| Start command | `npm run start:render` |
+| Disk mount path | `/data` |
+| Health check path | `/` |
 
-*Note on Build Command:* Dev dependencies are needed at build and start for the `prisma` CLI.
+Dev dependencies are installed because the `prisma` CLI is needed at build and at start. `build:full` builds the client first, then the API.
 
-## 3. Environment Variables
+`start:render` does three things in order: it restores a database backup if one was requested (see [Restore from a backup copy](#restore-from-a-backup-copy)), runs `prisma migrate deploy`, then starts the API.
 
-Never commit secrets or write real values into documentation. Generate unique secrets for each environment.
+## Environment variables
 
-### Secret Generation Command
+Never commit secrets or put real values in documentation. Set these in the Render dashboard. The server validates them at start-up and refuses to start if any are invalid.
 
-Generate 32+ character secrets using:
+Generate each JWT secret separately:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Run this command twice to generate distinct values for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`.
-
-### Variables Table
-
-| Variable | Required | Description |
+| Variable | Required | Value |
 |---|---|---|
-| `NODE_ENV` | Required | Set to `production`. |
-| `DATABASE_URL` | Required | Absolute `file:` URL on the persistent disk (e.g. `file:/data/vault.db`). |
-| `STORAGE_ROOT` | Required | Absolute path on disk for document storage (e.g. `/data`). |
-| `BACKUP_DIR` | Optional | Directory for database backups. Defaults to `<STORAGE_ROOT>/backups` (`/data/backups`). |
-| `BACKUP_KEEP` | Optional | Number of automatic backup copies to retain. Defaults to `14` (min 1, max 365). |
-| `JWT_ACCESS_SECRET` | Required | Secret for signing JWT access tokens (at least 32 characters; must differ from refresh secret). |
-| `JWT_REFRESH_SECRET` | Required | Secret for signing JWT refresh tokens (at least 32 characters; must differ from access secret). |
-| `JWT_ACCESS_TOKEN_EXPIRATION` | Optional | Access token expiration duration (defaults to `15m`). |
-| `JWT_REFRESH_TOKEN_EXPIRATION` | Optional | Refresh token expiration duration (defaults to `7d`). |
-| `FRONTEND_URL` | Required | Exact public site origin without trailing slash (e.g. `https://vault.example.com`). Used for CORS and email links. |
-| `MAX_UPLOAD_MB` | Optional | Maximum upload file size in megabytes. Defaults to `50` (min 1, max 1024). |
-| `SMTP_HOST` | Optional | SMTP host for email delivery. All SMTP fields or none must be provided. |
-| `SMTP_PORT` | Optional | SMTP port. Defaults to `587`. |
-| `SMTP_USER` | Optional | SMTP username. |
-| `SMTP_PASS` | Optional | SMTP password. |
-| `SMTP_FROM` | Optional | Sender address (e.g. `Vault <noreply@example.com>`). |
-| `COMPRESSION_THRESHOLD_BYTES` | Optional | Size threshold in bytes above which to attempt gzip compression. |
-| `COMPRESSION_MIN_SAVINGS_RATIO` | Optional | Minimum savings ratio (0 to 1) required to retain gzip compression. Defaults to `0.1`. |
-| `PORT` | Set by Render | Application port injected automatically by Render. |
-| `VITE_API_URL` | Optional | Client build variable. Defaults to `/api` on the same origin in production. |
-| `VITE_MAX_UPLOAD_MB` | Optional | Client build variable. Maximum upload file size in MB. Should match `MAX_UPLOAD_MB`. |
+| `NODE_ENV` | Yes | `production` |
+| `DATABASE_URL` | Yes | Absolute `file:` URL on the disk, for example `file:/data/vault.db` |
+| `STORAGE_ROOT` | Yes | Absolute path on the disk, for example `/data` |
+| `JWT_ACCESS_SECRET` | Yes | 32+ characters, different from the refresh secret |
+| `JWT_REFRESH_SECRET` | Yes | 32+ characters, different from the access secret |
+| `FRONTEND_URL` | Yes | Exact public origin without a trailing slash, for example `https://vault.example.com` |
+| `JWT_ACCESS_TOKEN_EXPIRATION` | No | Default `15m` |
+| `JWT_REFRESH_TOKEN_EXPIRATION` | No | Default `7d` |
+| `MAX_UPLOAD_MB` | No | Default `50`, range 1 to 1024 |
+| `BACKUP_DIR` | No | Default `<STORAGE_ROOT>/backups` |
+| `BACKUP_KEEP` | No | Default `14`, range 1 to 365 |
+| `COMPRESSION_THRESHOLD_BYTES` | No | Default 5 MB |
+| `COMPRESSION_MIN_SAVINGS_RATIO` | No | Default `0.1` |
+| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | All or none | Outgoing mail |
+| `SMTP_PORT` | No | Default `587` |
+| `PORT` | Set by Render | Injected automatically |
+| `VITE_API_URL` | No | Client build variable. Defaults to `/api`, which suits one service on one origin |
+| `VITE_MAX_UPLOAD_MB` | No | Client build variable. Keep it equal to `MAX_UPLOAD_MB` |
 
-## 4. Before Deploying a Migration
+`VITE_*` variables are baked in at build time, so changing them needs a new build.
 
-Before deploying code containing database migrations, take a manual backup from the Render Shell:
+## Before deploying a migration
+
+Take a manual backup from the Render Shell first. Replace `YYYYMMDD-HHmm` with the current date and time:
 
 ```bash
 cd /opt/render/project/src/server && node -e "require('better-sqlite3')(process.env.DATABASE_URL.replace(/^file:/,'')).exec(\"VACUUM INTO '/data/backups/manual-YYYYMMDD-HHmm.sqlite'\")"
 ```
 
-Replace `YYYYMMDD-HHmm` with the current date and time (e.g. `manual-20261008-2200.sqlite`).
-Manual copies use the `manual-` prefix and are never pruned by automatic cleanup routines.
+Files named `manual-*` are never pruned by the automatic clean-up.
 
-## 5. First Deploy of Phase 4.5
+## Upgrading an existing deployment
 
-1. Take a manual backup of the existing database via the Render Shell (see section 4).
-2. In the Render Dashboard:
-   - Update the Build Command to `npm install --include=dev && npx prisma generate && npm run build:full`.
-   - Update the Start Command to `npm run start:render`.
-   - Set the new environment variables (`STORAGE_ROOT`, `MAX_UPLOAD_MB`, `BACKUP_DIR`, `BACKUP_KEEP`, and verify `JWT_*` secrets meet length requirements).
-3. Trigger a manual deploy and inspect service logs:
-   - Verify `prisma migrate deploy` applies pending migrations.
-   - Verify a startup backup is created and logged.
-4. Have all users sign in once to issue fresh sessions with JWT session tracking (`jti`).
-5. Perform the rate-limit proxy check (section 10) to verify client IP detection.
+1. Take a manual backup (above).
+2. Check the build and start commands and the environment variables against this guide.
+3. Deploy, then check the logs: `prisma migrate deploy` should apply any pending migrations, and a start-up backup should be logged if the newest one is over 24 hours old.
+4. If session handling changed, ask users to sign in again.
+5. After the first production deploy, run the [proxy check](#proxy-check).
 
-## 6. Automatic Backups
+## Automatic backups
 
-- **Schedule:** Backups run automatically every night at 02:30 server time (UTC), and on server startup whenever the newest existing backup is more than 24 hours old.
-- **Retention:** The newest `BACKUP_KEEP` copies (default 14) are retained in `BACKUP_DIR`. Older copies matching `docindex-YYYYMMDD-HHmm.sqlite` are pruned automatically.
-- **Disk Snapshots:** Render's daily persistent disk snapshot (retained for at least 7 days) includes these backup files.
-- **Disk Space Monitoring:** Check disk usage via the Render dashboard Disk page or in the Shell with:
-  ```bash
-  du -sh /data/backups
-  ```
+- **Schedule:** every night at 02:30 server time, and at start-up when there is no backup or the newest is over 24 hours old.
+- **Format:** `docindex-YYYYMMDD-HHmm.sqlite` in `BACKUP_DIR`, with the time in UTC. Each is a consistent copy made with `VACUUM INTO`.
+- **Retention:** the newest `BACKUP_KEEP` files matching that name are kept and older ones are deleted.
+- **Contents:** a backup holds the database only, not the uploaded files.
+- **Disk space:** check with `du -sh /data/backups` in the Render Shell, or on the Disk page of the dashboard.
 
-## 7. Copy a Backup Off Render
+## Copy a backup off Render
 
-To retain offsite copies outside Render:
+The backups sit on the same disk as the database, so keep copies elsewhere too. From your own computer, after adding your SSH key in Render:
 
-### Using SCP (from your local machine)
-After adding your SSH key in Render:
 ```bash
-scp -s <service-ssh-address>:/data/backups/<backup-file-name>.sqlite .
+scp <service-ssh-address>:/data/backups/<backup-file-name>.sqlite .
 ```
-*(Note: Run `scp` on your local PC terminal, not inside the Render Shell).*
 
-### Using Magic Wormhole (if available)
-If `which wormhole` succeeds in the Render Shell:
-```bash
-# In Render Shell:
-wormhole send /data/backups/<backup-file-name>.sqlite
+Run this in a local terminal, not in the Render Shell. Automatic offsite copies are planned for Phase 5.
 
-# On your local machine:
-wormhole receive
-```
-Do not rely on Wormhole being pre-installed. Always store offsite backup copies in a separate storage provider.
+## Restore from a backup copy
 
-## 8. Restore the Database From a Backup Copy
+1. In the Render Shell, list the backups and choose a file:
 
-1. Open the Render Shell and list available backups:
    ```bash
    ls -lh /data/backups
    ```
-   Choose the target `.sqlite` file.
-2. Optionally take a manual backup of the current database before restoring (section 4).
-3. Create the restore marker file (substituting the actual backup filename and `BACKUP_DIR`):
+
+2. Optionally take a manual backup of the current database first.
+3. Create the restore marker, using the chosen file name:
+
    ```bash
    echo docindex-YYYYMMDD-HHmm.sqlite > /data/backups/RESTORE
    ```
-4. In the Render Dashboard: **Manual Deploy** → **Restart service**.
-5. During startup:
-   - Render stops the application process.
-   - The `start:render` hook detects `/data/backups/RESTORE`, replaces the SQLite database file, removes stale journal/wal/shm files, and renames the marker to `RESTORE.done-YYYYMMDD-HHmm`.
-   - `prisma migrate deploy` runs to bring the restored database up to date with migrations.
-   - The application boots.
-6. Check service logs to confirm: `"Database restored from <filename>"`.
 
-*Note on document files:* Database copies contain metadata, users, and tags, but not uploaded file blobs. Documents uploaded after the backup was taken remain on disk in `STORAGE_ROOT` but will not appear in the database list.
+4. In the dashboard, run a manual deploy or restart the service.
+5. On start-up, `start:render` reads the marker, replaces the database file, removes any stale `-journal`, `-wal` and `-shm` files, and renames the marker to `RESTORE.done-YYYYMMDD-HHmm`. Migrations then run on the restored database and the API starts.
+6. Check the logs for `Database restored from <file name>`.
 
-## 9. Restore From a Render Snapshot
+The marker must contain only the name of a `.sqlite` file in the backups folder. Otherwise the start-up fails with an error, so the service doesn't boot on a half-restored database.
 
-To recover both the database and file storage simultaneously:
-1. In the Render Dashboard, go to the **Disk** page.
-2. Open **Snapshots** and select **Restore**.
-3. Render restores the entire disk state as of the snapshot timestamp. Any data written after the snapshot will be lost.
+Uploaded files aren't part of a database copy. Files uploaded after the backup remain on disk but won't appear in the app.
 
-*Recommendation:* Prefer restoring from a database copy (section 8) unless persistent disk files are corrupted or missing.
+## Restore from a Render disk snapshot
 
-## 10. Proxy Check
+To recover the database and the files together, use the Snapshots section of the Disk page in the Render dashboard. This returns the whole disk to the snapshot time, so anything written afterwards is lost. Prefer a database copy unless the disk's files are damaged.
 
-Verify that Render's proxy hop configuration correctly identifies client IP addresses:
-1. Attempt to sign in with an incorrect password 11 times from one network connection.
-2. The 11th attempt must receive HTTP 429: `"Too many attempts. Wait a few minutes and try again."`.
-3. Concurrently attempt to sign in from a different network (e.g. mobile hotspot): sign-in attempts must still be accepted and not blocked. If they are blocked, the proxy hop count is incorrect.
+## Proxy check
 
-## 11. Email
+The app trusts one proxy hop in production so that rate limits use the real client IP. To confirm that:
 
-- SMTP configuration is optional.
-- If SMTP variables are omitted, the server logs email notifications (e.g. `"email not sent (SMTP not configured)..."`).
-- Self-registration requires email verification and therefore cannot complete without SMTP configured. For pilots without SMTP, create user accounts directly from the admin Users page.
+1. Enter a wrong password for the same email 11 times from one network. The 11th attempt must return 429 with "Too many attempts. Wait a few minutes and try again."
+2. From a different network, such as a phone hotspot, sign in. It must not be blocked. If it is, the proxy hop count is wrong.
+
+## Email
+
+SMTP is optional. Without it, the server logs lines starting `email not sent (SMTP not configured)` and does not send anything. Self-registration needs email verification, so it can't complete without SMTP. For a pilot without SMTP, create users from the admin Users page instead.
