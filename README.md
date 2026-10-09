@@ -172,7 +172,7 @@ Behaviour worth knowing:
 
 ## Current status
 
-Phases 1 to 4.5 and the UI redesign are complete. Phase 5 (deployment and OneDrive storage) is next. The Jobs section is hidden until Phase 6 (its sidebar link shows a "not available yet" message), and a few controls are placeholders waiting for backend endpoints (see [docs/project-plan.md](docs/project-plan.md)).
+Phases 1 to 4.5 and the UI redesign are complete. Phase 5 (deployment and OneDrive storage) is next, followed by Phase 5.5 (security hardening). The Jobs section is hidden until Phase 6 (its sidebar link shows a "not available yet" message), and a few controls are placeholders waiting for backend endpoints (see [docs/project-plan.md](docs/project-plan.md)).
 
 - [docs/project-plan.md](docs/project-plan.md): phase summaries, Phase 5 detail and technical notes
 - [docs/BACKLOG.md](docs/BACKLOG.md): open ideas and resolved items

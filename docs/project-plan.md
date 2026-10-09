@@ -4,7 +4,7 @@ A multi-user document indexing and retrieval tool for construction teams. For se
 
 ## Current position
 
-Phases 1 to 4.5 and the UI redesign are complete. **Phase 5 is next.** Phases 6 and 7 are not started, and the Jobs section is hidden until Phase 6.
+Phases 1 to 4.5 and the UI redesign are complete. **Phase 5 is next, then Phase 5.5 (security hardening).** Phases 6 and 7 are not started, and the Jobs section is hidden until Phase 6.
 
 ## Goal and product rules
 
@@ -49,6 +49,26 @@ Status: **not started.** SMTP, environment validation and nightly database backu
 | Print button | Optional: print a document with a preview, if time allows. |
 
 Carry-over from the [backlog](BACKLOG.md) worth doing alongside: expire and resend email verification links.
+
+## Phase 5.5: security hardening
+
+Status: **not started.** Follows Phase 5, so the storage change (OneDrive) is settled before encryption is added. Based on a review of the deployed pilot. Nothing here changes the permissions model.
+
+| Area | Item | Notes |
+|---|---|---|
+| Encryption in transit | Confirm HTTPS only | Check that the production domain only serves HTTPS and that plain HTTP redirects. Helmet already sends an HSTS header. |
+| Encryption at rest | Encrypt stored files | Documents, the database and backups are currently stored unencrypted. Encrypt files in the `BlobStore` layer (for example AES-256-GCM, with a key from an environment variable), and plan key rotation. Decide how this works with OneDrive, and whether Render's own disk encryption is enough for the database. |
+| Encryption at rest | Encrypt backups before they leave the server | Applies to the offsite copies from Phase 5. |
+| Dependencies | Patch known vulnerabilities | `npm audit` reports high and critical findings in the server and client. Update `multer`, NestJS and `nodemailer` first, then run the audit in CI so it can't drift. |
+| Accounts | Expire and resend verification links | Add an expiry and a resend action, as in the [backlog](BACKLOG.md). |
+| Accounts | Password reset | Single-use, expiring reset links by email. |
+| Accounts | Apply the password policy to admin-set passwords | Or force a policy-compliant password at first sign-in, which already happens. |
+| Accounts | Per-account sign-in lockout | Rate limits are per IP and held in memory, so they reset on every restart. |
+| Sessions | Keep the access token out of `sessionStorage` | Hold it in memory and rely on the refresh cookie after a reload. |
+| Sessions | Audit log of sign-ins and admin actions | The deletion log is the only audit trail today. |
+| API | Shared admin guard | Replace the repeated inline admin checks, as in the backlog. |
+| API | Escape search snippets on the server | As in the backlog. |
+| Operations | Secret rotation steps | Document how to rotate the JWT secrets and the encryption key. |
 
 ## Phase 6: async processing
 

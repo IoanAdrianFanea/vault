@@ -13,6 +13,8 @@ Open items only. Each one was checked against the current code.
 
 ## Accounts and security
 
+Most of these are planned for Phase 5.5 in the [project plan](project-plan.md).
+
 - **Verification email expiry and resend:** the email says the link is valid for 24 hours, but no expiry is stored or checked, and a lost email can't be resent. Add an expiry column, or an `EmailVerification` table if password-reset tokens are also needed.
 - **Password reset:** there is no forgot-password flow.
 - **Restrict self-registration:** `POST /auth/register` is public. Accounts need verification and approval, and registration can't complete without SMTP. Optionally allow switching it off for closed deployments.
