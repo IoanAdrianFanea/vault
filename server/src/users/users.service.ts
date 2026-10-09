@@ -129,7 +129,10 @@ export class UsersService {
       data.fullName = dto.fullName.trim() || null;
     }
 
-    if (dto.email !== undefined && dto.email.toLowerCase() !== current.email.toLowerCase()) {
+    if (
+      dto.email !== undefined &&
+      dto.email.toLowerCase() !== current.email.toLowerCase()
+    ) {
       const existing = await this.findByEmailInsensitive(dto.email);
       if (existing && existing.id !== id) {
         throw new ConflictException('Email is already in use');
@@ -218,11 +221,15 @@ export class UsersService {
       });
       if (!target) throw new NotFoundException('User not found');
       await this.assertNotLastActiveAdmin(tx, target);
-      const keptDocuments = await tx.document.count({ where: { uploadedById: id } });
+      const keptDocuments = await tx.document.count({
+        where: { uploadedById: id },
+      });
       await tx.user.delete({ where: { id } });
       return { email: target.email, keptDocuments };
     });
-    this.logger.log(`User ${result.email} deleted by admin ${actorId}; ${result.keptDocuments} uploaded document(s) kept`);
+    this.logger.log(
+      `User ${result.email} deleted by admin ${actorId}; ${result.keptDocuments} uploaded document(s) kept`,
+    );
   }
 
   // Find users by account status - ADMIN ONLY

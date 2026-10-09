@@ -50,10 +50,7 @@ export class PurgeTask {
         const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const { count } = await this.prisma.refreshToken.deleteMany({
           where: {
-            OR: [
-              { expiresAt: { lt: now } },
-              { revokedAt: { lt: oneDayAgo } },
-            ],
+            OR: [{ expiresAt: { lt: now } }, { revokedAt: { lt: oneDayAgo } }],
           },
         });
         this.logger.log(`Pruned ${count} old refresh token(s)`);

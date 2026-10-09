@@ -16,6 +16,7 @@ import { EmailModule } from './email/email.module';
 import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 import { FiltersModule } from './filters/filters.module';
 import { ArchiveModule } from './archive/archive.module';
+import { BackupModule } from './backup/backup.module';
 import path from 'path';
 
 @Module({
@@ -40,6 +41,7 @@ import path from 'path';
     RecycleBinModule,
     FiltersModule,
     ArchiveModule,
+    BackupModule,
   ],
   controllers: [],
   providers: [

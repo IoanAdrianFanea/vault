@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 import { UserRole, DocumentStatus } from '@prisma/client';
 import { DocumentsService } from './documents.service';
 
@@ -43,7 +43,9 @@ describe('DocumentsService', () => {
     };
 
     mockBlobStore = {
-      saveFile: jest.fn().mockResolvedValue({ storageKey: 'active/proj/doc.pdf' }),
+      saveFile: jest
+        .fn()
+        .mockResolvedValue({ storageKey: 'active/proj/doc.pdf' }),
       deleteFile: jest.fn(),
     };
 

@@ -13,7 +13,9 @@ export function buildHelmetOptions(frontendUrl?: string): HelmetOptions {
         frameSrc: ["'self'", 'blob:'],
         objectSrc: ["'self'", 'blob:'],
         connectSrc: ["'self'"],
-        upgradeInsecureRequests: frontendUrl?.startsWith('https://') ? [] : null,
+        upgradeInsecureRequests: frontendUrl?.startsWith('https://')
+          ? []
+          : null,
       },
     },
   };

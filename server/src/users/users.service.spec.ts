@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import { ConflictException } from '@nestjs/common';
 import {
   UsersService,
@@ -185,7 +185,9 @@ describe('UsersService', () => {
     it('sets emailVerifiedAt on creation', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       mockPrisma.user.findMany.mockResolvedValue([]);
-      mockPrisma.user.create.mockImplementation(({ data }) => Promise.resolve(data));
+      mockPrisma.user.create.mockImplementation(({ data }) =>
+        Promise.resolve(data),
+      );
 
       await service.createUser({
         email: 'test@example.com',
@@ -217,7 +219,9 @@ describe('UsersService', () => {
           fullName: 'Test User',
           role: 'USER',
         }),
-      ).rejects.toThrow(new ConflictException('User with this email already exists'));
+      ).rejects.toThrow(
+        new ConflictException('User with this email already exists'),
+      );
       expect(mockPrisma.user.create).not.toHaveBeenCalled();
     });
   });

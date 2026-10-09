@@ -1,3 +1,4 @@
+// Direct fs usage allowed: storage layout migration script (RQ7).
 /**
  * One-off, idempotent migration script to transition storage layout from
  * legacy {userId}/... to active/{projectId}/... and deleted/{projectId}/...
@@ -128,7 +129,7 @@ async function main(): Promise<void> {
         for (const entry of topEntries) {
           if (
             entry.isDirectory() &&
-            !['active', 'archived', 'deleted'].includes(entry.name)
+            !['active', 'archived', 'deleted', 'backups'].includes(entry.name)
           ) {
             const dirPath = path.join(rootDir, entry.name);
             await fs.rmdir(dirPath).catch(() => {});

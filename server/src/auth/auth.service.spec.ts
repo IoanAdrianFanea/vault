@@ -1,14 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
-import {
-  BadRequestException,
-  UnauthorizedException,
-} from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/require-await */
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import {
-  AuthService,
-  ACCOUNT_NOT_ACTIVE_MESSAGE,
-} from './auth.service';
+import { AuthService, ACCOUNT_NOT_ACTIVE_MESSAGE } from './auth.service';
 
 interface StoredRefreshToken {
   id: string;
@@ -64,7 +58,8 @@ describe('AuthService', () => {
             tokens.find((t) => {
               if (where.id && t.id !== where.id) return false;
               if (where.userId && t.userId !== where.userId) return false;
-              if (where.revokedAt === null && t.revokedAt !== null) return false;
+              if (where.revokedAt === null && t.revokedAt !== null)
+                return false;
               if (where.expiresAt?.gt && t.expiresAt <= where.expiresAt.gt)
                 return false;
               return true;

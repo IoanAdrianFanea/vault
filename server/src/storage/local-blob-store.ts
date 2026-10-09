@@ -1,3 +1,4 @@
+// Direct fs usage allowed: local blob storage provider (RQ7).
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {

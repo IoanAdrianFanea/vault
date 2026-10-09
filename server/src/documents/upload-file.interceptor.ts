@@ -27,11 +27,11 @@ export class DocumentUploadInterceptor implements NestInterceptor {
     next: CallHandler,
   ): Promise<Observable<any>> {
     try {
-      return (await this.inner.intercept(context, next)) as Observable<any>;
+      return await this.inner.intercept(context, next);
     } catch (error) {
       if (
         error instanceof PayloadTooLargeException ||
-        (error as any)?.code === 'LIMIT_FILE_SIZE'
+        error?.code === 'LIMIT_FILE_SIZE'
       ) {
         throw new PayloadTooLargeException(
           `File is larger than ${this.maxMb} MB.`,

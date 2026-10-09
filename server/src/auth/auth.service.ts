@@ -60,7 +60,9 @@ export class AuthService {
   // Create new user account — returns pending message, no tokens issued
   async register(dto: RegisterDto): Promise<RegisterResult> {
     // Check if user already exists
-    const existingUser = await this.usersService.findByEmailInsensitive(dto.email);
+    const existingUser = await this.usersService.findByEmailInsensitive(
+      dto.email,
+    );
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
