@@ -30,6 +30,7 @@ export interface DropdownProps<T extends string> {
   align?: 'start' | 'end';
   size?: ButtonSize;
   disabled?: boolean;
+  fullWidth?: boolean;
 }
 
 export function Dropdown<T extends string>({
@@ -41,6 +42,7 @@ export function Dropdown<T extends string>({
   align = 'start',
   size = 'sm',
   disabled = false,
+  fullWidth = false,
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -149,7 +151,7 @@ export function Dropdown<T extends string>({
     <div
       ref={rootRef}
       onKeyDown={handleRootKeyDown}
-      className="relative inline-block"
+      className={fullWidth ? 'relative block w-full' : 'relative inline-block'}
     >
       <button
         ref={triggerRef}
@@ -160,10 +162,16 @@ export function Dropdown<T extends string>({
         aria-controls={listId}
         onClick={handleTriggerClick}
         onKeyDown={handleTriggerKeyDown}
-        className={buttonClassName('secondary', size, 'max-w-xs')}
+        className={buttonClassName(
+          'secondary',
+          size,
+          fullWidth ? 'w-full' : 'max-w-xs',
+        )}
       >
         <span className="text-ink-muted">{label}:</span>
-        <span className="truncate text-ink">{selectedLabel}</span>
+        <span className={fullWidth ? 'min-w-0 flex-1 truncate text-left text-ink' : 'truncate text-ink'}>
+          {selectedLabel}
+        </span>
         <span
           className="material-symbols-outlined text-[16px] leading-none text-ink-muted"
           aria-hidden="true"
@@ -174,9 +182,9 @@ export function Dropdown<T extends string>({
 
       {isOpen && (
         <div
-          className={`absolute top-full mt-1 z-dropdown min-w-full w-max max-w-xs rounded-md border border-line-strong bg-canvas shadow-overlay py-1 ${
-            align === 'end' ? 'right-0' : 'left-0'
-          }`}
+          className={`absolute top-full mt-1 z-dropdown min-w-full w-max rounded-md border border-line-strong bg-canvas shadow-overlay py-1 ${
+            fullWidth ? 'max-w-full' : 'max-w-xs'
+          } ${align === 'end' ? 'right-0' : 'left-0'}`}
         >
           <ul
             id={listId}
@@ -204,7 +212,7 @@ export function Dropdown<T extends string>({
                     aria-selected={isSelected}
                     onClick={() => selectOption(option.value)}
                     onMouseEnter={() => setActiveIndex(index)}
-                    className={`flex items-center gap-2 h-7 px-2 mx-1 rounded text-body text-ink cursor-pointer ${
+                    className={`flex items-center gap-2 h-7 px-2 mx-1 rounded text-body text-ink cursor-pointer touch:h-11 max-md:text-[15px] ${
                       isActive ? 'bg-subtle' : ''
                     }`}
                   >

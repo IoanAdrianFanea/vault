@@ -340,7 +340,7 @@ export default function Search() {
             <DataTable label="Search results" fixed busy={isLoading}>
               <thead>
                 <TableRow>
-                  <TableHeaderCell align="center" className="w-8">
+                  <TableHeaderCell align="center" className="w-8 touch:w-13">
                     <Checkbox
                       aria-label="Select all results"
                       checked={selection.allSelected}

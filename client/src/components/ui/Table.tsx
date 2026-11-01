@@ -20,6 +20,7 @@ export interface DataTableProps {
   busy?: boolean;
   label?: string;
   className?: string;
+  tableClassName?: string;
 }
 
 export function DataTable({
@@ -28,6 +29,7 @@ export function DataTable({
   busy = false,
   label,
   className,
+  tableClassName,
 }: DataTableProps) {
   const containerClasses = [
     'min-h-0 overflow-auto custom-scrollbar rounded border border-line bg-canvas',
@@ -40,6 +42,7 @@ export function DataTable({
     'w-full border-separate border-spacing-0 text-left text-body text-ink-body',
     fixed ? 'table-fixed' : '',
     busy ? 'opacity-60' : '',
+    tableClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -75,7 +78,7 @@ export function TableHeaderCell({
   ...rest
 }: TableHeaderCellProps) {
   const baseClasses =
-    'sticky top-0 z-sticky h-7 px-2 bg-subtle border-b border-line align-middle whitespace-nowrap text-label uppercase text-ink-muted';
+    'sticky top-0 z-sticky h-7 px-2 bg-subtle border-b border-line align-middle whitespace-nowrap text-label uppercase text-ink-muted touch:h-9';
 
   const classes = [baseClasses, alignClasses[align], className].filter(Boolean).join(' ');
 
@@ -153,7 +156,7 @@ export function TableCell({
   ...rest
 }: TableCellProps) {
   const classes = [
-    'h-8 px-2 py-1 border-b border-line align-middle',
+    'h-8 px-2 py-1 border-b border-line align-middle touch:h-13',
     alignClasses[align],
     className,
   ]
@@ -182,7 +185,7 @@ export function TableSkeletonRows({ columns, rows = 8 }: TableSkeletonRowsProps)
           {Array.from({ length: columns }).map((_, colIndex) => {
             const widthClass = widthCycle[(rowIndex + colIndex) % 4];
             return (
-              <td key={colIndex} className="h-8 px-2 py-1 border-b border-line">
+              <td key={colIndex} className="h-8 px-2 py-1 border-b border-line touch:h-13">
                 <span
                   className={`block h-3 animate-pulse rounded-sm bg-line ${widthClass}`}
                 />

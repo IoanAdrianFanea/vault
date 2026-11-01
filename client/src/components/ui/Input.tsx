@@ -21,9 +21,10 @@ export function Input({
   ...rest
 }: InputProps) {
   const baseClasses =
-    'block w-full rounded border bg-canvas px-2.5 text-body text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 disabled:bg-subtle disabled:text-ink-muted';
+    'block w-full rounded border bg-canvas px-2.5 text-body text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 disabled:bg-subtle disabled:text-ink-muted max-md:text-base';
 
-  const sizeClass = size === 'sm' ? 'h-7' : 'h-[30px]';
+  // 16px text on phones stops iOS zooming in on focus.
+  const sizeClass = size === 'sm' ? 'h-7 touch:h-11' : 'h-[30px] touch:h-11';
   const iconPadding = leadingIcon ? 'pl-8' : '';
   const stateClass = invalid
     ? 'border-status-red-text focus:border-status-red-text focus:ring-status-red-text'

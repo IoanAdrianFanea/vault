@@ -291,7 +291,7 @@ export default function AdminPending() {
           >
             <thead>
               <TableRow>
-                <TableHeaderCell align="center" className="w-8">
+                <TableHeaderCell align="center" className="w-8 touch:w-13">
                   <Checkbox
                     aria-label={`Select all ${
                       tab === 'pending' ? 'pending' : 'rejected'

@@ -1,3 +1,5 @@
+import plugin from 'tailwindcss/plugin';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -50,8 +52,25 @@ export default {
         label: ['11px', { lineHeight: '14px', letterSpacing: '0.04em', fontWeight: '600' }],
         badge: ['11px', { lineHeight: '14px', letterSpacing: '0.02em', fontWeight: '500' }],
       },
+      spacing: {
+        13: '3.25rem',
+      },
       borderRadius: {
         badge: '3px',
+      },
+      keyframes: {
+        'sheet-up': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'translateY(0)' },
+        },
+        'drawer-in': {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'sheet-up': 'sheet-up 200ms ease-out',
+        'drawer-in': 'drawer-in 200ms ease-out',
       },
       boxShadow: {
         overlay: '0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04)',
@@ -70,5 +89,10 @@ export default {
   },
   plugins: [
     require('@tailwindcss/forms'),
+    // `touch:` targets touch screens whatever their width. It is a plain variant rather
+    // than a `raw` screen, because a raw screen turns off Tailwind's `max-*` variants.
+    plugin(({ addVariant }) => {
+      addVariant('touch', '@media (pointer: coarse)');
+    }),
   ],
 }

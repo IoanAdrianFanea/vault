@@ -49,7 +49,7 @@ export function DocumentTable({
     <DataTable fixed busy={isLoading && documents.length > 0} label="Documents">
       <thead>
         <tr>
-          <TableHeaderCell className="w-10" align="center">
+          <TableHeaderCell className="w-10 touch:w-13" align="center">
             <Checkbox
               aria-label="Select all shown documents"
               checked={allSelected}

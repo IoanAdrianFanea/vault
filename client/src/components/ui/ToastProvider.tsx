@@ -83,10 +83,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext value={api}>
       {children}
+      {/* On phones toasts sit bottom centre, above the bottom action bars. */}
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 right-4 z-toast flex w-full max-w-[360px] flex-col gap-2"
+        className="pointer-events-none fixed bottom-4 right-4 z-toast flex w-full max-w-[360px] flex-col gap-2 max-md:bottom-24 max-md:left-1/2 max-md:right-auto max-md:w-[calc(100%-2rem)] max-md:-translate-x-1/2"
       >
         {toasts.map((toast) => (
           <Toast

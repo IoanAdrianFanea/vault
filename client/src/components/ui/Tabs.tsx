@@ -13,6 +13,14 @@ import { Badge, type BadgeTone } from './Badge';
 import { getTabId, getTabPanelId } from './tabIds';
 import { formatCount } from '../../utils/format';
 
+// Below 1024px and on touch screens the tab row scrolls sideways instead of
+// squeezing. The bottom line is drawn inset so the scroll box doesn't clip it.
+const scrollRowClasses =
+  'max-lg:overflow-x-auto max-lg:border-b-0 max-lg:shadow-[inset_0_-1px_0_theme(colors.line)] touch:overflow-x-auto touch:border-b-0 touch:shadow-[inset_0_-1px_0_theme(colors.line)]';
+
+const scrollItemClasses =
+  'max-lg:mb-0 max-lg:shrink-0 max-lg:whitespace-nowrap touch:mb-0 touch:shrink-0 touch:whitespace-nowrap touch:h-11';
+
 export interface TabItem<T extends string = string> {
   value: T;
   label: string;
@@ -47,13 +55,14 @@ export function Tabs<T extends string>({
   if (isRouted) {
     const navClasses = [
       'flex items-end gap-5 border-b border-line',
+      scrollRowClasses,
       className,
     ]
       .filter(Boolean)
       .join(' ');
 
     const linkBase =
-      '-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0.5 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+      `-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0.5 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${scrollItemClasses}`;
 
     return (
       <nav aria-label={label} className={navClasses}>
@@ -136,7 +145,7 @@ export function Tabs<T extends string>({
               onClick={() => onChange?.(item.value)}
               onKeyDown={(e) => handleKeyDown(e, index)}
               className={[
-                'h-7 rounded-sm px-3 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                'h-7 rounded-sm px-3 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent touch:h-11',
                 isSelected
                   ? 'bg-canvas font-medium text-ink ring-1 ring-line'
                   : 'text-ink-muted hover:text-ink',
@@ -153,13 +162,14 @@ export function Tabs<T extends string>({
 
   const containerClasses = [
     'flex items-end gap-5 border-b border-line',
+    scrollRowClasses,
     className,
   ]
     .filter(Boolean)
     .join(' ');
 
   const tabBase =
-    '-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0.5 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+    `-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-0.5 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${scrollItemClasses}`;
 
   return (
     <div role="tablist" aria-label={label} className={containerClasses}>

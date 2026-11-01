@@ -315,7 +315,7 @@ export default function AdminUsers() {
         <DataTable label="Users" fixed busy={loading && users.length > 0}>
           <thead>
             <TableRow>
-              <TableHeaderCell align="center" className="w-8">
+              <TableHeaderCell align="center" className="w-8 touch:w-13">
                 <Checkbox
                   aria-label="Select all users"
                   checked={selection.allSelected}
