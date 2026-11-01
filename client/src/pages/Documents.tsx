@@ -2,11 +2,13 @@
 Main documents list: filters, sorting, status filter from the URL, bulk
 selection, ZIP and CSV export, delete and preview. It combines the toolbar,
 table and summary bar components and keeps the filters in the page state. While
-documents are processing it quietly refreshes the list every few seconds.
+documents are processing it quietly refreshes the list every few seconds. Phones
+get a card list, a filter sheet and a Take photo bar instead of the table,
+selection and export.
 */
 
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Document, DocumentStatus } from '../types';
 import {
@@ -19,13 +21,16 @@ import { downloadDocument } from '../api/exports';
 import { useIsAdmin } from '../components/layout/currentUser';
 import { useDocumentStatusRefresh } from '../components/layout/documentStatusRefresh';
 import {
+  Badge,
   Button,
   ButtonLink,
   ConfirmDialog,
   DOCUMENT_STATUS_ORDER,
+  Dropdown,
   EmptyState,
   InlineAlert,
   useToast,
+  type DropdownOption,
   type MenuItem,
 } from '../components/ui';
 import {
@@ -40,6 +45,8 @@ import {
   type SaveResult,
 } from '../utils/saveFile';
 import { readRouteNotice } from '../utils/routeNotice';
+import { setPendingUploads } from '../utils/pendingUploads';
+import { useIsPhone } from '../hooks/useMediaQuery';
 import { toUiDocument } from '../components/documents/documentConvert';
 import {
   buildDocumentsCsv,
@@ -48,6 +55,7 @@ import {
 import {
   ALL_PROJECTS,
   DOCUMENT_LIST_LIMIT,
+  DOCUMENT_SORT_OPTIONS,
   buildFilterChips,
   countAppliedFilters,
   createEmptyFilters,
@@ -61,7 +69,12 @@ import {
   type DocumentSortBy,
 } from '../components/documents/documentFilters';
 import { BulkActionBar } from '../components/documents/BulkActionBar';
+import { DocumentCardList } from '../components/documents/DocumentCardList';
 import { DocumentFilterChips } from '../components/documents/DocumentFilterChips';
+import {
+  DocumentFilterSheet,
+  type DocumentFilterSheetApply,
+} from '../components/documents/DocumentFilterSheet';
 import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal';
 import { DocumentTable } from '../components/documents/DocumentTable';
 import { DocumentsSummaryBar } from '../components/documents/DocumentsSummaryBar';
@@ -97,6 +110,7 @@ export default function Documents() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = useIsAdmin();
+  const isPhone = useIsPhone();
   const { showToast } = useToast();
   const { refresh: refreshSidebarCounts } = useDocumentStatusRefresh();
 
@@ -128,6 +142,8 @@ export default function Documents() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Stops a reload showing the upload notice again
   useEffect(() => {
@@ -518,6 +534,32 @@ export default function Documents() {
     setReloadKey((k) => k + 1);
   };
 
+  const handleApplyFilterSheet = (next: DocumentFilterSheetApply) => {
+    setApplied(next.filters);
+    setSortBy(next.sortBy);
+    setStatusParam(next.status);
+    setIsFilterSheetOpen(false);
+  };
+
+  const handleClearFilterSheet = () => {
+    handleClearAllFilters();
+    setIsFilterSheetOpen(false);
+  };
+
+  const handlePhotosTaken = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setPendingUploads(files);
+    navigate('/upload');
+  };
+
+  const projectOptions: DropdownOption<string>[] = [
+    { value: ALL_PROJECTS, label: 'All projects' },
+    ...projects.map((p) => ({ value: p.id, label: p.name })),
+  ];
+  const sortLabel = DOCUMENT_SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label ?? '';
+
   const exportItems: MenuItem[] = [
     {
       id: 'export-shown',
@@ -544,6 +586,205 @@ export default function Documents() {
       onSelect: handleGenerateRegisterPdf,
     },
   ];
+
+  const alerts = (
+    <>
+      {pageAlert && (
+        <InlineAlert tone={pageAlert.tone} onDismiss={() => setPageAlert(null)}>
+          {pageAlert.message}
+        </InlineAlert>
+      )}
+
+      {pollTimedOut && hasInProgress && (
+        <InlineAlert tone="info">
+          Some documents are still processing. Refresh the page to check again.
+        </InlineAlert>
+      )}
+
+      {isLoading && (
+        <p className="sr-only" role="status">
+          Loading documents…
+        </p>
+      )}
+    </>
+  );
+
+  const emptyOrErrorState =
+    loadError && !isLoading ? (
+      <div className="flex flex-col items-start gap-3">
+        <InlineAlert tone="error">
+          <p className="font-medium">Couldn't load documents.</p>
+          <p>{loadError}</p>
+        </InlineAlert>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon="refresh"
+          onClick={handleRetryLoad}
+        >
+          Try again
+        </Button>
+      </div>
+    ) : rows.length === 0 && !isLoading ? (
+      hasFilters ? (
+        <EmptyState
+          className="rounded border border-line"
+          icon="filter_alt_off"
+          title="No documents match these filters"
+          description="Remove a filter or clear them all."
+          action={
+            <Button variant="secondary" size="sm" onClick={handleClearAllFilters}>
+              Clear filters
+            </Button>
+          }
+        />
+      ) : (
+        <EmptyState
+          className="rounded border border-line"
+          icon="folder_open"
+          title="No documents yet"
+          description="Upload PDF, JPG or PNG files to add them to the register."
+          action={
+            <ButtonLink to="/upload" variant="dark" size="sm" icon="add">
+              Upload document
+            </ButtonLink>
+          }
+        />
+      )
+    ) : null;
+
+  const renderSummaryBar = (compact: boolean) =>
+    snapshot && rows.length > 0 ? (
+      <DocumentsSummaryBar
+        total={total}
+        totalBytes={totalBytes}
+        shownCount={rows.length}
+        isCapped={isCapped}
+        updatedAt={snapshot.updatedAt}
+        counts={counts}
+        isFailedFilterActive={statusFilter === 'FAILED'}
+        onShowFailed={handleShowFailed}
+        compact={compact}
+      />
+    ) : null;
+
+  const previewModal = selectedDocument && (
+    <DocumentPreviewModal
+      document={selectedDocument}
+      filterDefinitions={filterDefinitions}
+      onClose={handleClosePreview}
+    />
+  );
+
+  // Phones only view, sort, filter and photograph: no selection, bulk actions,
+  // export or retry.
+  if (isPhone) {
+    return (
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pt-3 pb-24">
+          <div className="flex items-baseline justify-between gap-3">
+            <h1 className="text-section text-ink">All documents</h1>
+            {countLabel && (
+              <span className="text-right text-small text-ink-muted tabular-nums" aria-live="polite">
+                {countLabel}
+              </span>
+            )}
+          </div>
+
+          <Dropdown
+            label="Project"
+            value={applied.projectId}
+            options={projectOptions}
+            onChange={handleProjectChange}
+            fullWidth
+          />
+
+          <div className="flex gap-2">
+            <Button
+              icon="tune"
+              aria-haspopup="dialog"
+              aria-label={chips.length > 0 ? `Filter, ${chips.length} applied` : undefined}
+              onClick={() => setIsFilterSheetOpen(true)}
+            >
+              Filter
+              {chips.length > 0 && <Badge tone="teal">{formatCount(chips.length)}</Badge>}
+            </Button>
+            <Button
+              aria-haspopup="dialog"
+              onClick={() => setIsFilterSheetOpen(true)}
+              className="min-w-0 flex-1"
+            >
+              <span className="text-ink-muted">Sort:</span>
+              <span className="min-w-0 flex-1 truncate text-left text-ink">{sortLabel}</span>
+              <span
+                className="material-symbols-outlined text-[20px] leading-none text-ink-muted"
+                aria-hidden="true"
+              >
+                expand_more
+              </span>
+            </Button>
+          </div>
+
+          <DocumentFilterChips
+            chips={chips}
+            onRemove={handleRemoveChip}
+            onClearAll={handleClearAllFilters}
+          />
+
+          {alerts}
+
+          {emptyOrErrorState ?? (
+            <>
+              {renderSummaryBar(true)}
+              <DocumentCardList
+                documents={rows}
+                isLoading={isLoading}
+                onOpen={handleOpenPreview}
+                onDownload={handleDownloadDocument}
+              />
+            </>
+          )}
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-bulkbar border-t border-line bg-canvas px-4 pb-5 pt-3">
+          <Button
+            variant="dark"
+            icon="photo_camera"
+            onClick={() => cameraInputRef.current?.click()}
+            className="w-full max-md:h-12"
+          >
+            Take photo
+          </Button>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={handlePhotosTaken}
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+        </div>
+
+        {isFilterSheetOpen && (
+          <DocumentFilterSheet
+            applied={applied}
+            sortBy={sortBy}
+            status={statusFilter}
+            filterDefinitions={filterDefinitions}
+            appliedCount={chips.length}
+            onApply={handleApplyFilterSheet}
+            onClearAll={handleClearFilterSheet}
+            onClose={() => setIsFilterSheetOpen(false)}
+          />
+        )}
+
+        {previewModal}
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
@@ -573,66 +814,9 @@ export default function Documents() {
           onClearAll={handleClearAllFilters}
         />
 
-        {pageAlert && (
-          <InlineAlert tone={pageAlert.tone} onDismiss={() => setPageAlert(null)}>
-            {pageAlert.message}
-          </InlineAlert>
-        )}
+        {alerts}
 
-        {pollTimedOut && hasInProgress && (
-          <InlineAlert tone="info">
-            Some documents are still processing. Refresh the page to check again.
-          </InlineAlert>
-        )}
-
-        {isLoading && (
-          <p className="sr-only" role="status">
-            Loading documents…
-          </p>
-        )}
-
-        {loadError && !isLoading ? (
-          <div className="flex flex-col items-start gap-3">
-            <InlineAlert tone="error">
-              <p className="font-medium">Couldn't load documents.</p>
-              <p>{loadError}</p>
-            </InlineAlert>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon="refresh"
-              onClick={handleRetryLoad}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : rows.length === 0 && !isLoading ? (
-          hasFilters ? (
-            <EmptyState
-              className="rounded border border-line"
-              icon="filter_alt_off"
-              title="No documents match these filters"
-              description="Remove a filter or clear them all."
-              action={
-                <Button variant="secondary" size="sm" onClick={handleClearAllFilters}>
-                  Clear filters
-                </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              className="rounded border border-line"
-              icon="folder_open"
-              title="No documents yet"
-              description="Upload PDF, JPG or PNG files to add them to the register."
-              action={
-                <ButtonLink to="/upload" variant="dark" size="sm" icon="add">
-                  Upload document
-                </ButtonLink>
-              }
-            />
-          )
-        ) : (
+        {emptyOrErrorState ?? (
           <>
             <DocumentTable
               documents={rows}
@@ -646,29 +830,12 @@ export default function Documents() {
               onDownload={handleDownloadDocument}
               onRetry={handleRetryProcessing}
             />
-            {snapshot && rows.length > 0 && (
-              <DocumentsSummaryBar
-                total={total}
-                totalBytes={totalBytes}
-                shownCount={rows.length}
-                isCapped={isCapped}
-                updatedAt={snapshot.updatedAt}
-                counts={counts}
-                isFailedFilterActive={statusFilter === 'FAILED'}
-                onShowFailed={handleShowFailed}
-              />
-            )}
+            {renderSummaryBar(false)}
           </>
         )}
       </div>
 
-      {selectedDocument && (
-        <DocumentPreviewModal
-          document={selectedDocument}
-          filterDefinitions={filterDefinitions}
-          onClose={handleClosePreview}
-        />
-      )}
+      {previewModal}
 
       {selectedIds.size > 0 && (
         <BulkActionBar

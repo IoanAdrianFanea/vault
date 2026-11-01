@@ -38,6 +38,7 @@ import {
 } from '../utils/format';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../utils/uploadLimits';
 import { beginSave, saveFile } from '../utils/saveFile';
+import { clearPendingUploads, peekPendingUploads } from '../utils/pendingUploads';
 
 export interface UploadQueueItem {
   id: string;
@@ -52,9 +53,41 @@ const allowedMimeTypes = new Set([
   'image/png',
 ]);
 
+interface FileBatch {
+  accepted: File[];
+  rejected: string[];
+  oversize: string[];
+}
+
+function partitionFiles(files: File[]): FileBatch {
+  const batch: FileBatch = { accepted: [], rejected: [], oversize: [] };
+  for (const file of files) {
+    if (!allowedMimeTypes.has(file.type)) {
+      batch.rejected.push(file.name);
+    } else if (file.size > MAX_UPLOAD_BYTES) {
+      batch.oversize.push(file.name);
+    } else {
+      batch.accepted.push(file);
+    }
+  }
+  return batch;
+}
+
+function toQueueItems(files: File[]): UploadQueueItem[] {
+  return files.map((file) => ({
+    file,
+    id: Math.random().toString(36).substring(2, 9),
+    status: 'waiting',
+  }));
+}
+
 export default function Upload() {
   const navigate = useNavigate();
-  const [queue, setQueue] = useState<UploadQueueItem[]>([]);
+  // Photos taken from the documents list on a phone arrive through this store.
+  const [initialBatch] = useState(() => partitionFiles(peekPendingUploads()));
+  const [queue, setQueue] = useState<UploadQueueItem[]>(() =>
+    toQueueItems(initialBatch.accepted),
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -63,8 +96,8 @@ export default function Upload() {
   const [filterDefs, setFilterDefs] = useState<FilterDefinition[]>([]);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [rejectedFileNames, setRejectedFileNames] = useState<string[]>([]);
-  const [oversizeFileNames, setOversizeFileNames] = useState<string[]>([]);
+  const [rejectedFileNames, setRejectedFileNames] = useState<string[]>(initialBatch.rejected);
+  const [oversizeFileNames, setOversizeFileNames] = useState<string[]>(initialBatch.oversize);
   const [isUploading, setIsUploading] = useState(false);
   const [runResult, setRunResult] = useState<{
     tone: 'success' | 'warning';
@@ -145,30 +178,14 @@ export default function Upload() {
   };
 
   const addFiles = (files: File[]) => {
-    const accepted: File[] = [];
-    const rejected: string[] = [];
-    const oversize: string[] = [];
-
-    for (const file of files) {
-      if (!allowedMimeTypes.has(file.type)) {
-        rejected.push(file.name);
-      } else if (file.size > MAX_UPLOAD_BYTES) {
-        oversize.push(file.name);
-      } else {
-        accepted.push(file);
-      }
-    }
+    const { accepted, rejected, oversize } = partitionFiles(files);
 
     setRejectedFileNames(rejected);
     setOversizeFileNames(oversize);
     setRunResult(null);
 
     if (accepted.length > 0) {
-      const newItems: UploadQueueItem[] = accepted.map((file) => ({
-        file,
-        id: Math.random().toString(36).substring(2, 9),
-        status: 'waiting',
-      }));
+      const newItems = toQueueItems(accepted);
       setQueue((prev) => [...prev, ...newItems]);
     }
 
@@ -182,6 +199,10 @@ export default function Upload() {
     setIsDragging(false);
     addFiles(Array.from(e.dataTransfer.files));
   };
+
+  useEffect(() => {
+    clearPendingUploads();
+  }, []);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {

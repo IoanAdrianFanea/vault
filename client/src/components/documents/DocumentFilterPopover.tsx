@@ -5,17 +5,16 @@ submit.
 */
 
 
-import { useId, useState, type FormEvent } from 'react';
-import type { CustomFilterQueryValue } from '../../api/documents';
+import { useId, type FormEvent } from 'react';
 import type { FilterDefinition } from '../../api/filters';
 import type { Project } from '../../api/projects';
 import { Badge, Button, FormField, Input, Popover, Select } from '../ui';
 import {
   ALL_PROJECTS,
   normaliseFilters,
-  sortFilterDefinitions,
   type AppliedFilters,
 } from './documentFilters';
+import { useFilterDraft } from './useFilterDraft';
 
 export interface DocumentFilterPopoverProps {
   isOpen: boolean;
@@ -45,42 +44,10 @@ function FilterPanel({
   onApply,
   onClearAll,
 }: FilterPanelProps) {
-  const [draft, setDraft] = useState<AppliedFilters>(applied);
+  const { draft, setDraft, sortedDefs, dateErrors, hasErrors, setCustomValue } =
+    useFilterDraft(applied, filterDefinitions);
   const keywordId = useId();
   const projectFieldId = useId();
-
-  const sortedDefs = sortFilterDefinitions(filterDefinitions);
-
-  const dateErrors: Record<string, string> = {};
-  for (const def of sortedDefs) {
-    if (def.type === 'DATE') {
-      const entry = draft.customFilters[def.id];
-      const from = entry?.from?.trim();
-      const to = entry?.to?.trim();
-      if (from && to && from > to) {
-        dateErrors[def.id] = 'The end date is before the start date.';
-      }
-    }
-  }
-
-  const hasErrors = Object.keys(dateErrors).length > 0;
-
-  const setCustomValue = (filterId: string, patch: Partial<CustomFilterQueryValue>) => {
-    setDraft((prev) => {
-      const merged = { ...prev.customFilters[filterId], ...patch };
-      const nextCustom = { ...prev.customFilters };
-      if (
-        (merged.value && merged.value.trim().length > 0) ||
-        (merged.from && merged.from.trim().length > 0) ||
-        (merged.to && merged.to.trim().length > 0)
-      ) {
-        nextCustom[filterId] = merged;
-      } else {
-        delete nextCustom[filterId];
-      }
-      return { ...prev, customFilters: nextCustom };
-    });
-  };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

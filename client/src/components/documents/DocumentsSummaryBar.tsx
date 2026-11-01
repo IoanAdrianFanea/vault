@@ -24,6 +24,8 @@ export interface DocumentsSummaryBarProps {
   counts: DocumentStatusCounts | null;
   isFailedFilterActive: boolean;
   onShowFailed: () => void;
+  // Phone layout: "N files • Updated HH:MM" with short status counts.
+  compact?: boolean;
 }
 
 export function DocumentsSummaryBar({
@@ -35,20 +37,28 @@ export function DocumentsSummaryBar({
   counts,
   isFailedFilterActive,
   onShowFailed,
+  compact = false,
 }: DocumentsSummaryBarProps) {
-  const items = [
-    <>
-      Total:{' '}
-      <strong className="font-semibold text-ink">
-        {formatCountLabel(total, 'file', 'files')}
-      </strong>
-    </>,
-    <>
-      <strong className="font-semibold text-ink">{formatFileSize(totalBytes)}</strong>{' '}
-      {isCapped ? `in the ${formatCount(shownCount)} shown` : 'stored'}
-    </>,
-    <>Updated {formatTime(updatedAt)}</>,
-  ];
+  const items = compact
+    ? [
+        <strong className="font-semibold text-ink">
+          {formatCountLabel(total, 'file', 'files')}
+        </strong>,
+        <>Updated {formatTime(updatedAt)}</>,
+      ]
+    : [
+        <>
+          Total:{' '}
+          <strong className="font-semibold text-ink">
+            {formatCountLabel(total, 'file', 'files')}
+          </strong>
+        </>,
+        <>
+          <strong className="font-semibold text-ink">{formatFileSize(totalBytes)}</strong>{' '}
+          {isCapped ? `in the ${formatCount(shownCount)} shown` : 'stored'}
+        </>,
+        <>Updated {formatTime(updatedAt)}</>,
+      ];
 
   let aside = null;
   if (counts) {
@@ -62,7 +72,10 @@ export function DocumentsSummaryBar({
               className="size-1.5 rounded-full bg-status-amber-dot"
               aria-hidden="true"
             />
-            Indexing {formatCountLabel(inProgress, 'document', 'documents')}
+            Indexing{' '}
+            {compact
+              ? formatCount(inProgress)
+              : formatCountLabel(inProgress, 'document', 'documents')}
           </span>
         ) : counts.FAILED === 0 ? (
           <span className="inline-flex items-center gap-1 text-accent">

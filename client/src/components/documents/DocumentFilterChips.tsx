@@ -26,7 +26,7 @@ export function DocumentFilterChips({
     <div
       role="group"
       aria-label="Active filters"
-      className="flex shrink-0 flex-wrap items-center gap-1.5"
+      className="flex shrink-0 flex-wrap items-center gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:py-0.5"
     >
       {chips.map((chip) => (
         <Chip
@@ -36,7 +36,7 @@ export function DocumentFilterChips({
           onRemove={() => onRemove(chip.key)}
         />
       ))}
-      <TextAction tone="accent" className="ml-1" onClick={onClearAll}>
+      <TextAction tone="accent" className="ml-1 max-md:shrink-0" onClick={onClearAll}>
         Clear all
       </TextAction>
     </div>

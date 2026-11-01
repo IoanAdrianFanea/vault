@@ -33,7 +33,7 @@ export function BulkBar({
     <div
       role="region"
       aria-label="Bulk actions"
-      className="fixed bottom-6 left-1/2 z-bulkbar flex -translate-x-1/2 items-center gap-1 rounded-md bg-action py-1 pl-3 pr-1 text-white shadow-overlay"
+      className="fixed bottom-6 left-1/2 z-bulkbar flex -translate-x-1/2 items-center gap-1 rounded-md bg-action py-1 pl-3 pr-1 text-white shadow-overlay max-lg:w-max touch:w-max"
     >
       <span className="text-body font-medium tabular-nums" aria-live="polite">
         {formatCount(selectedCount)} selected
