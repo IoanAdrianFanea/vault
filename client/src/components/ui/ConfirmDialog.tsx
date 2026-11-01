@@ -43,6 +43,7 @@ export function ConfirmDialog({
       role="alertdialog"
       showCloseButton={false}
       closeDisabled={isConfirming}
+      fullScreenOnPhone={false}
       ariaDescribedBy={messageId}
       footer={
         <>

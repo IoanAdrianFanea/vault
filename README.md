@@ -14,6 +14,7 @@ A multi-user web app for uploading, organising, searching and retrieving project
 - Admins can archive a finished project into a single zip, download it, or restore it later.
 - Self-registration needs email verification and admin approval. Admins can also create users directly.
 - An admin console covers projects, members, users, pending requests, the recycle bin, the archive and the custom filters.
+- Works on phones (take and upload photos, view, sort and filter documents) and tablets (everything).
 
 ## Tech stack
 

@@ -49,7 +49,7 @@ export function DocumentTable({
     <DataTable fixed busy={isLoading && documents.length > 0} label="Documents">
       <thead>
         <tr>
-          <TableHeaderCell className="w-10" align="center">
+          <TableHeaderCell className="w-10 touch:w-13" align="center">
             <Checkbox
               aria-label="Select all shown documents"
               checked={allSelected}
@@ -77,7 +77,7 @@ export function DocumentTable({
           >
             Status
           </TableHeaderCell>
-          <TableHeaderCell className="w-56">Uploaded by</TableHeaderCell>
+          <TableHeaderCell className="w-56 md:max-lg:hidden">Uploaded by</TableHeaderCell>
           <TableHeaderCell
             className="w-40"
             sortDirection={
@@ -131,14 +131,18 @@ export function DocumentTable({
                   >
                     {doc.fileName}
                   </button>
-                  <span className="block text-small text-ink-muted tabular-nums">
+                  <span className="block text-small text-ink-muted tabular-nums md:max-lg:truncate">
                     {doc.fileSize}
+                    {/* Tablet portrait drops the Uploaded by column, so it shows here. */}
+                    {doc.uploadedBy && (
+                      <span className="hidden md:max-lg:inline"> · {doc.uploadedBy}</span>
+                    )}
                   </span>
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={doc.status} errorMessage={doc.errorMessage} />
                 </TableCell>
-                <TableCell className="truncate" title={doc.uploadedBy}>
+                <TableCell className="truncate md:max-lg:hidden" title={doc.uploadedBy}>
                   {doc.uploadedBy ?? '—'}
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-ink-muted tabular-nums">

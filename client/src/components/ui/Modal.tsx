@@ -16,6 +16,7 @@ import {
 import { createPortal } from 'react-dom';
 import { IconButton } from './IconButton';
 import { getFocusableElements } from './focusable';
+import { useIsPhone } from '../../hooks/useMediaQuery';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -25,10 +26,16 @@ export interface ModalProps {
   headerAside?: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'ml' | 'lg' | 'xl';
+  // `sheet` slides up from the bottom of the screen with rounded top corners.
+  variant?: 'dialog' | 'sheet';
   layer?: 'modal' | 'confirm';
   role?: 'dialog' | 'alertdialog';
   showCloseButton?: boolean;
   closeDisabled?: boolean;
+  // Dialogs fill the screen on phones unless this is false.
+  fullScreenOnPhone?: boolean;
+  // On phones, close with a back arrow at the start of the header instead of a cross.
+  phoneCloseStyle?: 'close' | 'back';
   ariaDescribedBy?: string;
   bodyClassName?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
@@ -51,10 +58,13 @@ export function Modal({
   headerAside,
   footer,
   size = 'md',
+  variant = 'dialog',
   layer = 'modal',
   role = 'dialog',
   showCloseButton = true,
   closeDisabled = false,
+  fullScreenOnPhone = true,
+  phoneCloseStyle = 'close',
   ariaDescribedBy,
   bodyClassName,
   initialFocusRef,
@@ -64,6 +74,10 @@ export function Modal({
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const returnElementRef = useRef<HTMLElement | null>(null);
+  const isPhone = useIsPhone();
+  const isSheet = variant === 'sheet';
+  const isFullScreen = !isSheet && fullScreenOnPhone;
+  const showBackButton = isPhone && isFullScreen && phoneCloseStyle === 'back';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -136,12 +150,46 @@ export function Modal({
     return null;
   }
 
+  const overlayClasses = [
+    'fixed inset-0',
+    layer === 'confirm' ? 'z-confirm' : 'z-modal',
+    isSheet
+      ? 'flex items-end justify-center md:items-center md:p-4'
+      : 'flex items-center justify-center p-4',
+    isFullScreen ? 'max-md:p-0' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const panelClasses = isSheet
+    ? `relative flex max-h-[calc(100dvh-4rem)] w-full flex-col rounded-t-lg border-t border-line-strong bg-canvas shadow-overlay focus:outline-none motion-safe:animate-sheet-up md:max-h-[calc(100vh-2rem)] md:rounded-md md:border md:motion-safe:animate-none ${sizeClasses[size]}`
+    : [
+        `relative flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-md border border-line-strong bg-canvas shadow-overlay focus:outline-none ${sizeClasses[size]}`,
+        isFullScreen
+          ? 'max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0'
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+  const headerClasses = [
+    isSheet
+      ? 'flex items-center gap-2 border-b border-line py-1.5 pl-4 pr-1'
+      : 'flex items-start gap-3 border-b border-line px-4 py-3',
+    showBackButton ? 'max-md:gap-1 max-md:pl-1' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const footerClasses = [
+    'flex items-center justify-end gap-2 border-t border-line bg-subtle px-4 py-3',
+    isSheet || isFullScreen ? 'max-md:bg-canvas max-md:pb-5' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return createPortal(
-    <div
-      className={`fixed inset-0 ${
-        layer === 'confirm' ? 'z-confirm' : 'z-modal'
-      } flex items-center justify-center p-4`}
-    >
+    <div className={overlayClasses}>
       <div
         className="absolute inset-0 bg-ink/40"
         aria-hidden="true"
@@ -157,11 +205,24 @@ export function Modal({
         aria-describedby={ariaDescribedBy ?? (description ? descriptionId : undefined)}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-md border border-line-strong bg-canvas shadow-overlay focus:outline-none ${sizeClasses[size]}`}
+        className={panelClasses}
       >
-        <header className="flex items-start gap-3 border-b border-line px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="truncate text-panel text-ink">
+        <header className={headerClasses}>
+          {showBackButton && (
+            <IconButton
+              icon="arrow_back"
+              label="Back"
+              variant="ghost"
+              onClick={onClose}
+              disabled={closeDisabled}
+              className="shrink-0 max-md:size-11"
+            />
+          )}
+          <div className={`min-w-0 flex-1 ${showBackButton ? 'pt-2.5' : ''}`}>
+            <h2
+              id={titleId}
+              className="truncate text-panel text-ink max-md:whitespace-normal max-md:[overflow-wrap:anywhere]"
+            >
               {title}
             </h2>
             {description && (
@@ -171,7 +232,7 @@ export function Modal({
             )}
           </div>
           {headerAside && <div className="shrink-0 pt-0.5">{headerAside}</div>}
-          {showCloseButton && (
+          {showCloseButton && !showBackButton && (
             <IconButton
               icon="close"
               label="Close"
@@ -179,7 +240,7 @@ export function Modal({
               variant="ghost"
               onClick={onClose}
               disabled={closeDisabled}
-              className="-mr-1.5 -mt-0.5"
+              className={isSheet ? 'max-md:size-11' : '-mr-1.5 -mt-0.5'}
             />
           )}
         </header>
@@ -192,11 +253,7 @@ export function Modal({
           {children}
         </div>
 
-        {footer && (
-          <footer className="flex items-center justify-end gap-2 border-t border-line bg-subtle px-4 py-3">
-            {footer}
-          </footer>
-        )}
+        {footer && <footer className={footerClasses}>{footer}</footer>}
       </div>
     </div>,
     document.body,

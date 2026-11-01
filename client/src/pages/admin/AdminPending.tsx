@@ -288,10 +288,11 @@ export default function AdminPending() {
             }
             fixed
             busy={isLoading && displayList.length > 0}
+            tableClassName="max-lg:min-w-[760px] touch:min-w-[760px]"
           >
             <thead>
               <TableRow>
-                <TableHeaderCell align="center" className="w-8">
+                <TableHeaderCell align="center" className="w-8 touch:w-13">
                   <Checkbox
                     aria-label={`Select all ${
                       tab === 'pending' ? 'pending' : 'rejected'

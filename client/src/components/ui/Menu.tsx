@@ -106,7 +106,7 @@ export function Menu({
                     close();
                     item.onSelect();
                   }}
-                  className="flex h-7 w-full items-center px-3 text-left text-body text-ink whitespace-nowrap tabular-nums hover:bg-subtle focus:bg-subtle focus:outline-none disabled:cursor-not-allowed disabled:text-ink-muted disabled:hover:bg-transparent"
+                  className="flex h-7 w-full items-center px-3 text-left text-body text-ink whitespace-nowrap tabular-nums hover:bg-subtle focus:bg-subtle focus:outline-none disabled:cursor-not-allowed disabled:text-ink-muted disabled:hover:bg-transparent touch:h-11"
                 >
                   {item.label}
                 </button>

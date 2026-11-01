@@ -23,6 +23,7 @@ import {
   type DocumentSortBy,
 } from './documentFilters';
 import { DocumentFilterPopover } from './DocumentFilterPopover';
+import { useIsPhone } from '../../hooks/useMediaQuery';
 
 export interface DocumentsToolbarProps {
   projects: Project[];
@@ -55,12 +56,15 @@ export function DocumentsToolbar({
 }: DocumentsToolbarProps) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  const isPhone = useIsPhone();
+
   const projectOptions: DropdownOption<string>[] = [
     { value: ALL_PROJECTS, label: 'All projects' },
     ...projects.map((p) => ({ value: p.id, label: p.name })),
   ];
 
-  const projectFooter = isAdmin ? (
+  // Admin links never render on phones, which don't get the admin pages.
+  const projectFooter = isAdmin && !isPhone ? (
     <Link
       to="/admin/projects"
       className={textActionClassName('accent', 'label', 'flex h-7 items-center px-2')}

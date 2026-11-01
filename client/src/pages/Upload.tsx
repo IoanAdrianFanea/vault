@@ -1,7 +1,9 @@
 /*
 Upload page: choose a project, fill in the custom filter fields, add PDF, JPG or
 PNG files by dragging or browsing, and upload them one by one. It rejects wrong
-or oversized files up front and can save a local copy of each upload.
+or oversized files up front and can save a local copy of each upload. Phones
+get a photo grid with the camera instead of the drop zone and queue table, and
+photos taken from the documents list arrive already queued.
 */
 
 
@@ -30,7 +32,10 @@ import {
   TableCell,
   TableHeaderCell,
   TableRow,
+  TextAction,
 } from '../components/ui';
+import { UploadPhotoTile } from '../components/upload/UploadPhotoTile';
+import { useIsPhone } from '../hooks/useMediaQuery';
 import {
   formatCount,
   formatCountLabel,
@@ -38,6 +43,7 @@ import {
 } from '../utils/format';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../utils/uploadLimits';
 import { beginSave, saveFile } from '../utils/saveFile';
+import { clearPendingUploads, peekPendingUploads } from '../utils/pendingUploads';
 
 export interface UploadQueueItem {
   id: string;
@@ -52,9 +58,41 @@ const allowedMimeTypes = new Set([
   'image/png',
 ]);
 
+interface FileBatch {
+  accepted: File[];
+  rejected: string[];
+  oversize: string[];
+}
+
+function partitionFiles(files: File[]): FileBatch {
+  const batch: FileBatch = { accepted: [], rejected: [], oversize: [] };
+  for (const file of files) {
+    if (!allowedMimeTypes.has(file.type)) {
+      batch.rejected.push(file.name);
+    } else if (file.size > MAX_UPLOAD_BYTES) {
+      batch.oversize.push(file.name);
+    } else {
+      batch.accepted.push(file);
+    }
+  }
+  return batch;
+}
+
+function toQueueItems(files: File[]): UploadQueueItem[] {
+  return files.map((file) => ({
+    file,
+    id: Math.random().toString(36).substring(2, 9),
+    status: 'waiting',
+  }));
+}
+
 export default function Upload() {
   const navigate = useNavigate();
-  const [queue, setQueue] = useState<UploadQueueItem[]>([]);
+  // Photos taken from the documents list on a phone arrive through this store.
+  const [initialBatch] = useState(() => partitionFiles(peekPendingUploads()));
+  const [queue, setQueue] = useState<UploadQueueItem[]>(() =>
+    toQueueItems(initialBatch.accepted),
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -63,8 +101,8 @@ export default function Upload() {
   const [filterDefs, setFilterDefs] = useState<FilterDefinition[]>([]);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [rejectedFileNames, setRejectedFileNames] = useState<string[]>([]);
-  const [oversizeFileNames, setOversizeFileNames] = useState<string[]>([]);
+  const [rejectedFileNames, setRejectedFileNames] = useState<string[]>(initialBatch.rejected);
+  const [oversizeFileNames, setOversizeFileNames] = useState<string[]>(initialBatch.oversize);
   const [isUploading, setIsUploading] = useState(false);
   const [runResult, setRunResult] = useState<{
     tone: 'success' | 'warning';
@@ -72,7 +110,9 @@ export default function Upload() {
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const redirectTimerRef = useRef<number | null>(null);
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     let isActive = true;
@@ -145,30 +185,14 @@ export default function Upload() {
   };
 
   const addFiles = (files: File[]) => {
-    const accepted: File[] = [];
-    const rejected: string[] = [];
-    const oversize: string[] = [];
-
-    for (const file of files) {
-      if (!allowedMimeTypes.has(file.type)) {
-        rejected.push(file.name);
-      } else if (file.size > MAX_UPLOAD_BYTES) {
-        oversize.push(file.name);
-      } else {
-        accepted.push(file);
-      }
-    }
+    const { accepted, rejected, oversize } = partitionFiles(files);
 
     setRejectedFileNames(rejected);
     setOversizeFileNames(oversize);
     setRunResult(null);
 
     if (accepted.length > 0) {
-      const newItems: UploadQueueItem[] = accepted.map((file) => ({
-        file,
-        id: Math.random().toString(36).substring(2, 9),
-        status: 'waiting',
-      }));
+      const newItems = toQueueItems(accepted);
       setQueue((prev) => [...prev, ...newItems]);
     }
 
@@ -183,10 +207,20 @@ export default function Upload() {
     addFiles(Array.from(e.dataTransfer.files));
   };
 
+  useEffect(() => {
+    clearPendingUploads();
+  }, []);
+
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       addFiles(Array.from(e.target.files));
     }
+  };
+
+  const handlePhotosTaken = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length > 0) addFiles(files);
   };
 
   const removeFile = (id: string) => {
@@ -303,6 +337,258 @@ export default function Upload() {
       ? 'Choose a project before uploading.'
       : undefined;
 
+  const uploadButtonLabel =
+    retryableCount === 1
+      ? 'Upload 1 file'
+      : retryableCount > 1
+      ? `Upload ${formatCount(retryableCount)} files`
+      : 'Upload files';
+
+  const alerts = (
+    <>
+      {projectsError && (
+        <InlineAlert tone="error">{projectsError}</InlineAlert>
+      )}
+      {filtersError && (
+        <InlineAlert tone="warning">{filtersError}</InlineAlert>
+      )}
+      {rejectedFileNames.length > 0 && (
+        <InlineAlert
+          tone="warning"
+          onDismiss={() => setRejectedFileNames([])}
+        >
+          These files weren't added because they aren't PDF, JPG or PNG:{' '}
+          {rejectedFileNames.join(', ')}
+        </InlineAlert>
+      )}
+      {oversizeFileNames.length > 0 && (
+        <InlineAlert
+          tone="warning"
+          onDismiss={() => setOversizeFileNames([])}
+        >
+          These files are larger than {MAX_UPLOAD_MB} MB and weren't added:{' '}
+          {oversizeFileNames.join(', ')}
+        </InlineAlert>
+      )}
+      {runResult && (
+        <InlineAlert tone={runResult.tone}>{runResult.message}</InlineAlert>
+      )}
+    </>
+  );
+
+  const detailsPanel = (
+    <div className="rounded border border-line bg-canvas">
+      <header className="border-b border-line px-4 py-3">
+        <h2 className="text-panel text-ink">Upload details</h2>
+      </header>
+      <div className="space-y-4 p-4">
+        <FormField
+          label="Project"
+          htmlFor="upload-project"
+          error={projectError}
+        >
+          <Select
+            id="upload-project"
+            invalid={Boolean(projectError)}
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            disabled={isLoadingProjects || projects.length === 0}
+          >
+            {isLoadingProjects ? (
+              <option value="" disabled>
+                Loading projects…
+              </option>
+            ) : projects.length === 0 ? (
+              <option value="" disabled>
+                No projects available — ask an admin to add you to a
+                project
+              </option>
+            ) : (
+              projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))
+            )}
+          </Select>
+        </FormField>
+
+        {filterDefs.length > 0 && (
+          <div>
+            <h3 className="text-label uppercase text-ink-muted">
+              Document details
+            </h3>
+            <p className="text-small text-ink-muted">
+              Applied to every file in this batch.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-3 max-md:grid-cols-1">
+              {filterDefs.map((def) => (
+                <FormField
+                  key={def.id}
+                  label={def.name}
+                  htmlFor={`filter-${def.id}`}
+                >
+                  {def.type === 'NUMBER' ? (
+                    <Input
+                      id={`filter-${def.id}`}
+                      type="number"
+                      value={filterValues[def.id] ?? ''}
+                      onChange={(e) =>
+                        setFilterValues((prev) => ({
+                          ...prev,
+                          [def.id]: e.target.value,
+                        }))
+                      }
+                    />
+                  ) : def.type === 'DATE' ? (
+                    <Input
+                      id={`filter-${def.id}`}
+                      type="date"
+                      value={filterValues[def.id] ?? ''}
+                      onChange={(e) =>
+                        setFilterValues((prev) => ({
+                          ...prev,
+                          [def.id]: e.target.value,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      id={`filter-${def.id}`}
+                      type="text"
+                      placeholder={`Enter ${def.name.toLowerCase()}`}
+                      value={filterValues[def.id] ?? ''}
+                      onChange={(e) =>
+                        setFilterValues((prev) => ({
+                          ...prev,
+                          [def.id]: e.target.value,
+                        }))
+                      }
+                    />
+                  )}
+                </FormField>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Phones replace the drop zone and queue table with a photo grid and a
+  // bottom bar. The upload logic is shared.
+  if (isPhone) {
+    const queuedBytes = queue.reduce((acc, item) => acc + item.file.size, 0);
+    const allImages = queue.every((item) => item.file.type.startsWith('image/'));
+    const queueSummary =
+      queue.length === 0
+        ? `PDF, JPG or PNG, up to ${MAX_UPLOAD_MB} MB each`
+        : `${formatCountLabel(
+            queue.length,
+            allImages ? 'photo' : 'file',
+            allImages ? 'photos' : 'files',
+          )} · ${formatFileSize(queuedBytes)} · up to ${MAX_UPLOAD_MB} MB each`;
+
+    return (
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-28">
+          <PageHeader
+            back={{ label: 'Back to documents', to: '/documents' }}
+            title="Upload documents"
+            description="Photograph delivery notes, invoices and site photos."
+          />
+
+          {alerts}
+
+          <ul aria-label="Files to upload" className="grid grid-cols-3 gap-2">
+            {queue.map((item) => (
+              <UploadPhotoTile
+                key={item.id}
+                file={item.file}
+                status={item.status}
+                errorMessage={item.errorMessage}
+                showStatus={isUploading || item.status !== 'waiting'}
+                canRemove={
+                  (item.status === 'waiting' || item.status === 'failed') && !isUploading
+                }
+                onRemove={() => removeFile(item.id)}
+              />
+            ))}
+            <li>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isUploading}
+                className="flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-accent bg-selected text-body font-medium text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[28px] leading-none" aria-hidden="true">
+                  photo_camera
+                </span>
+                {queue.length === 0 ? 'Take photo' : 'Take another'}
+              </button>
+            </li>
+          </ul>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-small text-ink-muted tabular-nums">{queueSummary}</span>
+            <TextAction
+              tone="accent"
+              variant="inline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="shrink-0 underline"
+            >
+              Choose files
+            </TextAction>
+          </div>
+
+          {detailsPanel}
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-bulkbar flex gap-2 border-t border-line bg-canvas px-4 pb-5 pt-3">
+          <Button
+            variant="secondary"
+            onClick={clearList}
+            disabled={queue.length === 0 || isUploading}
+            className="max-md:h-12"
+          >
+            Clear list
+          </Button>
+          <Button
+            variant="dark"
+            icon="upload"
+            loading={isUploading}
+            disabled={!selectedProjectId || retryableCount === 0 || isUploading}
+            onClick={handleUploadAll}
+            className="flex-1 max-md:h-12"
+          >
+            {uploadButtonLabel}
+          </Button>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          onChange={handlePhotosTaken}
+          className="hidden"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4 overflow-y-auto custom-scrollbar">
@@ -312,131 +598,10 @@ export default function Upload() {
           description="Add delivery notes, invoices and site photos to a project."
         />
 
-        {projectsError && (
-          <InlineAlert tone="error">{projectsError}</InlineAlert>
-        )}
-        {filtersError && (
-          <InlineAlert tone="warning">{filtersError}</InlineAlert>
-        )}
-        {rejectedFileNames.length > 0 && (
-          <InlineAlert
-            tone="warning"
-            onDismiss={() => setRejectedFileNames([])}
-          >
-            These files weren't added because they aren't PDF, JPG or PNG:{' '}
-            {rejectedFileNames.join(', ')}
-          </InlineAlert>
-        )}
-        {oversizeFileNames.length > 0 && (
-          <InlineAlert
-            tone="warning"
-            onDismiss={() => setOversizeFileNames([])}
-          >
-            These files are larger than {MAX_UPLOAD_MB} MB and weren't added:{' '}
-            {oversizeFileNames.join(', ')}
-          </InlineAlert>
-        )}
-        {runResult && (
-          <InlineAlert tone={runResult.tone}>{runResult.message}</InlineAlert>
-        )}
+        {alerts}
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded border border-line bg-canvas">
-            <header className="border-b border-line px-4 py-3">
-              <h2 className="text-panel text-ink">Upload details</h2>
-            </header>
-            <div className="space-y-4 p-4">
-              <FormField
-                label="Project"
-                htmlFor="upload-project"
-                error={projectError}
-              >
-                <Select
-                  id="upload-project"
-                  invalid={Boolean(projectError)}
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  disabled={isLoadingProjects || projects.length === 0}
-                >
-                  {isLoadingProjects ? (
-                    <option value="" disabled>
-                      Loading projects…
-                    </option>
-                  ) : projects.length === 0 ? (
-                    <option value="" disabled>
-                      No projects available — ask an admin to add you to a
-                      project
-                    </option>
-                  ) : (
-                    projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))
-                  )}
-                </Select>
-              </FormField>
-
-              {filterDefs.length > 0 && (
-                <div>
-                  <h3 className="text-label uppercase text-ink-muted">
-                    Document details
-                  </h3>
-                  <p className="text-small text-ink-muted">
-                    Applied to every file in this batch.
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-3">
-                    {filterDefs.map((def) => (
-                      <FormField
-                        key={def.id}
-                        label={def.name}
-                        htmlFor={`filter-${def.id}`}
-                      >
-                        {def.type === 'NUMBER' ? (
-                          <Input
-                            id={`filter-${def.id}`}
-                            type="number"
-                            value={filterValues[def.id] ?? ''}
-                            onChange={(e) =>
-                              setFilterValues((prev) => ({
-                                ...prev,
-                                [def.id]: e.target.value,
-                              }))
-                            }
-                          />
-                        ) : def.type === 'DATE' ? (
-                          <Input
-                            id={`filter-${def.id}`}
-                            type="date"
-                            value={filterValues[def.id] ?? ''}
-                            onChange={(e) =>
-                              setFilterValues((prev) => ({
-                                ...prev,
-                                [def.id]: e.target.value,
-                              }))
-                            }
-                          />
-                        ) : (
-                          <Input
-                            id={`filter-${def.id}`}
-                            type="text"
-                            placeholder={`Enter ${def.name.toLowerCase()}`}
-                            value={filterValues[def.id] ?? ''}
-                            onChange={(e) =>
-                              setFilterValues((prev) => ({
-                                ...prev,
-                                [def.id]: e.target.value,
-                              }))
-                            }
-                          />
-                        )}
-                      </FormField>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-4 md:max-lg:grid-cols-1">
+          {detailsPanel}
 
           <div
             role="button"
@@ -560,11 +725,7 @@ export default function Upload() {
             disabled={!selectedProjectId || retryableCount === 0 || isUploading}
             onClick={handleUploadAll}
           >
-            {retryableCount === 1
-              ? 'Upload 1 file'
-              : retryableCount > 1
-              ? `Upload ${formatCount(retryableCount)} files`
-              : 'Upload files'}
+            {uploadButtonLabel}
           </Button>
         </div>
       </div>

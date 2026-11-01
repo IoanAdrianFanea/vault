@@ -18,7 +18,7 @@ export function PasswordInput({
   const inputId = id ?? generatedId;
   const [isVisible, setIsVisible] = useState(false);
 
-  const inputClasses = ['pr-9', className].filter(Boolean).join(' ');
+  const inputClasses = ['pr-9 touch:pr-12', className].filter(Boolean).join(' ');
 
   return (
     <div className="relative">

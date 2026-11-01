@@ -20,9 +20,9 @@ export function Select({
   ...rest
 }: SelectProps) {
   const baseClasses =
-    'block w-full rounded border bg-canvas py-0 pl-2.5 pr-8 text-body text-ink focus:outline-none focus:ring-1 disabled:bg-subtle disabled:text-ink-muted';
+    'block w-full rounded border bg-canvas py-0 pl-2.5 pr-8 text-body text-ink focus:outline-none focus:ring-1 disabled:bg-subtle disabled:text-ink-muted max-md:text-base';
 
-  const sizeClass = size === 'sm' ? 'h-7' : 'h-[30px]';
+  const sizeClass = size === 'sm' ? 'h-7 touch:h-11' : 'h-[30px] touch:h-11';
   const stateClass = invalid
     ? 'border-status-red-text focus:border-status-red-text focus:ring-status-red-text'
     : 'border-line focus:border-accent focus:ring-accent';

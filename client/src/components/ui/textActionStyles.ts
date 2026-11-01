@@ -10,6 +10,11 @@ export type TextActionVariant = 'label' | 'inline';
 const baseStyles =
   'inline-flex items-center rounded-sm whitespace-nowrap transition-colors hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline';
 
+// On touch screens a transparent 44px-tall ::after grows the hit area without
+// changing the layout or how the text looks.
+const touchHitArea =
+  "touch:relative touch:after:absolute touch:after:inset-x-0 touch:after:top-1/2 touch:after:h-11 touch:after:-translate-y-1/2 touch:after:content-['']";
+
 const variantStyles: Record<TextActionVariant, string> = {
   label: 'text-label uppercase',
   inline: 'text-small font-medium',
@@ -26,7 +31,7 @@ export function textActionClassName(
   variant: TextActionVariant = 'label',
   className?: string,
 ): string {
-  return [baseStyles, variantStyles[variant], toneStyles[tone], className]
+  return [baseStyles, touchHitArea, variantStyles[variant], toneStyles[tone], className]
     .filter(Boolean)
     .join(' ');
 }

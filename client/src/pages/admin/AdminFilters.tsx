@@ -188,7 +188,7 @@ export default function AdminFilters() {
           description="Add fields like Supplier or Order no. so users can tag and filter documents."
         />
       ) : (
-        <DataTable label="Custom filters" fixed busy={isLoading}>
+        <DataTable label="Custom filters" fixed busy={isLoading} tableClassName="max-lg:min-w-[640px] touch:min-w-[640px]">
           <thead>
             <TableRow>
               <TableHeaderCell>Name</TableHeaderCell>

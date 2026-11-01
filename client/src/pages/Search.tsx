@@ -1,7 +1,8 @@
 /*
 Search results page for the query in the URL, with highlighted snippets, row
 selection, bulk export and delete, and a document drawer and preview. Results
-come from the server's file name and text search.
+come from the server's file name and text search. Phones get simple result cards
+that open the document view, with no selection or bulk actions.
 */
 
 
@@ -38,6 +39,7 @@ import { ExportModal } from '../components/documents/ExportModal';
 import { SearchSnippet } from '../components/search/SearchSnippet.tsx';
 import { toUiDocument } from '../components/documents/documentConvert';
 import { useRangeSelection } from '../hooks/useRangeSelection';
+import { useIsPhone } from '../hooks/useMediaQuery';
 import { formatCount, formatCountLabel } from '../utils/format';
 import { beginSave, commonProjectName, describeSaveResult, type SaveResult } from '../utils/saveFile';
 
@@ -49,6 +51,7 @@ export default function Search() {
   const [searchParams] = useSearchParams();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const isPhone = useIsPhone();
   const query = searchParams.get('q') || '';
 
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -289,8 +292,8 @@ export default function Search() {
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
         <div
           className={`flex min-h-0 flex-1 flex-col gap-2 px-4 pt-3 ${
-            selection.selectedIds.size > 0 ? 'pb-20' : 'pb-4'
-          }`}
+            !isPhone && selection.selectedIds.size > 0 ? 'pb-20' : 'pb-4'
+          } ${isPhone ? 'overflow-y-auto' : ''}`}
         >
           <PageHeader
             title="Search results"
@@ -319,11 +322,25 @@ export default function Search() {
               <p>{error}</p>
             </InlineAlert>
           ) : isLoading && results.length === 0 ? (
-            <DataTable label="Search results" fixed>
-              <tbody>
-                <TableSkeletonRows columns={3} rows={6} />
-              </tbody>
-            </DataTable>
+            isPhone ? (
+              <ul className="flex flex-col gap-2" aria-hidden="true">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <li
+                    key={index}
+                    className="flex flex-col gap-2 rounded border border-line bg-canvas p-3"
+                  >
+                    <span className="block h-4 w-3/4 animate-pulse rounded-sm bg-line" />
+                    <span className="block h-3 w-full animate-pulse rounded-sm bg-line" />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <DataTable label="Search results" fixed>
+                <tbody>
+                  <TableSkeletonRows columns={3} rows={6} />
+                </tbody>
+              </DataTable>
+            )
           ) : results.length === 0 ? (
             <EmptyState
               className="rounded border border-line"
@@ -336,11 +353,37 @@ export default function Search() {
                 </ButtonLink>
               }
             />
+          ) : isPhone ? (
+            // Phones get simple cards that open the document view, with no selection.
+            <ul
+              aria-label="Search results"
+              aria-busy={isLoading || undefined}
+              className={`flex flex-col gap-2 ${isLoading ? 'opacity-60' : ''}`}
+            >
+              {results.map((result) => (
+                <li key={result.documentId}>
+                  <button
+                    type="button"
+                    disabled={previewLoadingId !== null}
+                    onClick={() => handleOpenPreview(result.documentId)}
+                    className="flex w-full flex-col gap-1 rounded border border-line bg-canvas p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait"
+                  >
+                    <span className="line-clamp-2 text-[14px] font-medium leading-5 text-ink [overflow-wrap:anywhere]">
+                      {result.filename}
+                    </span>
+                    <SearchSnippet
+                      snippet={result.snippet}
+                      className="line-clamp-2 text-small text-ink-muted"
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
             <DataTable label="Search results" fixed busy={isLoading}>
               <thead>
                 <TableRow>
-                  <TableHeaderCell align="center" className="w-8">
+                  <TableHeaderCell align="center" className="w-8 touch:w-13">
                     <Checkbox
                       aria-label="Select all results"
                       checked={selection.allSelected}
@@ -433,13 +476,22 @@ export default function Search() {
         </div>
       </main>
 
-      {drawerState && (
+      {drawerState && !isPhone && (
         <DocumentDrawer
           state={drawerState}
           filterDefinitions={filterDefinitions}
           onClose={handleCloseDrawer}
           onDelete={handleRequestDelete}
           onOpenPreview={handleOpenPreviewFromDrawer}
+        />
+      )}
+
+      {/* A /search/:id link on a phone opens the document view instead of the drawer. */}
+      {isPhone && drawerState?.status === 'ready' && !previewDocument && (
+        <DocumentPreviewModal
+          document={drawerState.document}
+          filterDefinitions={filterDefinitions}
+          onClose={handleCloseDrawer}
         />
       )}
 
@@ -451,7 +503,7 @@ export default function Search() {
         />
       )}
 
-      {selection.selectedIds.size > 0 && (
+      {!isPhone && selection.selectedIds.size > 0 && (
         <BulkActionBar
           selectedCount={selection.selectedIds.size}
           onExport={handleExportSelected}

@@ -200,6 +200,7 @@ export default function AdminArchive() {
         <DataTable
           label="Archived projects"
           fixed
+          tableClassName="max-lg:min-w-[920px] touch:min-w-[920px]"
           busy={isLoading && projects.length > 0}
         >
           <thead>
