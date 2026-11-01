@@ -115,11 +115,14 @@ export function AppShell({ children }: AppShellProps) {
   const [isPhoneSearchOpen, setIsPhoneSearchOpen] = useState(isSearchPage);
   const isMountedRef = useRef(false);
 
-  // The tablet menu closes whenever the route or its query changes.
-  const navigationKey = location.pathname + location.search;
-  const [menuNavigationKey, setMenuNavigationKey] = useState(navigationKey);
-  if (navigationKey !== menuNavigationKey) {
-    setMenuNavigationKey(navigationKey);
+  // The tablet menu closes on every navigation (including to the same URL) and
+  // when the screen leaves tablet portrait, so it can't reopen after a rotation.
+  const [menuNavigationKey, setMenuNavigationKey] = useState(location.key);
+  if (location.key !== menuNavigationKey) {
+    setMenuNavigationKey(location.key);
+    setIsMenuOpen(false);
+  }
+  if (!isTabletPortrait && isMenuOpen) {
     setIsMenuOpen(false);
   }
 

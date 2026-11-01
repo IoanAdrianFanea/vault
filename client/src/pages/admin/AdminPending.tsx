@@ -288,6 +288,7 @@ export default function AdminPending() {
             }
             fixed
             busy={isLoading && displayList.length > 0}
+            tableClassName="max-lg:min-w-[760px] touch:min-w-[760px]"
           >
             <thead>
               <TableRow>

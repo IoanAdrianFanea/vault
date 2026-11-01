@@ -215,7 +215,7 @@ export function Modal({
               variant="ghost"
               onClick={onClose}
               disabled={closeDisabled}
-              className="size-11 shrink-0"
+              className="shrink-0 max-md:size-11"
             />
           )}
           <div className={`min-w-0 flex-1 ${showBackButton ? 'pt-2.5' : ''}`}>

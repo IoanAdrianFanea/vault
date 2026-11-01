@@ -312,7 +312,7 @@ export default function AdminUsers() {
           }
         />
       ) : (
-        <DataTable label="Users" fixed busy={loading && users.length > 0}>
+        <DataTable label="Users" fixed busy={loading && users.length > 0} tableClassName="max-lg:min-w-[880px] touch:min-w-[880px]">
           <thead>
             <TableRow>
               <TableHeaderCell align="center" className="w-8 touch:w-13">
@@ -330,7 +330,7 @@ export default function AdminUsers() {
               <TableHeaderCell className="w-[90px]">Role</TableHeaderCell>
               <TableHeaderCell className="w-[100px]">Status</TableHeaderCell>
               <TableHeaderCell className="w-[110px]">Joined</TableHeaderCell>
-              <TableHeaderCell align="end" className="w-[112px]">
+              <TableHeaderCell align="end" className="w-[112px] touch:w-[152px]">
                 Actions
               </TableHeaderCell>
             </TableRow>

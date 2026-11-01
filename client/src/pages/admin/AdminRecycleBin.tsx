@@ -454,6 +454,7 @@ export default function AdminRecycleBin() {
               label={`Deleted documents in ${selectedProject.name}`}
               fixed
               busy={isLoadingProjectDocuments}
+              tableClassName="max-lg:min-w-[600px] touch:min-w-[600px]"
             >
               <thead>
                 <TableRow>
@@ -542,6 +543,7 @@ export default function AdminRecycleBin() {
                   label="Deleted documents"
                   fixed
                   busy={isLoading}
+                  tableClassName="max-lg:min-w-[900px] touch:min-w-[900px]"
                 >
                   <thead>
                     <TableRow>
@@ -702,6 +704,7 @@ export default function AdminRecycleBin() {
                   label="Deleted projects"
                   fixed
                   busy={isLoading}
+                  tableClassName="max-lg:min-w-[860px] touch:min-w-[860px]"
                 >
                   <thead>
                     <TableRow>

@@ -143,6 +143,10 @@ export default function Documents() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  // The sheet is phone-only, so it shouldn't reopen after rotating to a wider screen and back.
+  if (!isPhone && isFilterSheetOpen) {
+    setIsFilterSheetOpen(false);
+  }
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Stops a reload showing the upload notice again
@@ -537,7 +541,8 @@ export default function Documents() {
   const handleApplyFilterSheet = (next: DocumentFilterSheetApply) => {
     setApplied(next.filters);
     setSortBy(next.sortBy);
-    setStatusParam(next.status);
+    // Only touch the URL when the status changed, so Apply doesn't stack history entries.
+    if (next.status !== (statusFilter ?? null)) setStatusParam(next.status);
     setIsFilterSheetOpen(false);
   };
 

@@ -200,7 +200,7 @@ export default function AdminProjects() {
           }
         />
       ) : (
-        <DataTable label="Projects" fixed busy={isLoading && projects.length > 0}>
+        <DataTable label="Projects" fixed busy={isLoading && projects.length > 0} tableClassName="max-lg:min-w-[640px] touch:min-w-[640px]">
           <thead>
             <TableRow>
               <TableHeaderCell>Project name</TableHeaderCell>
@@ -208,7 +208,7 @@ export default function AdminProjects() {
                 Members
               </TableHeaderCell>
               <TableHeaderCell className="w-[130px]">Created</TableHeaderCell>
-              <TableHeaderCell align="end" className="w-[152px]">
+              <TableHeaderCell align="end" className="w-[152px] touch:w-[200px]">
                 Actions
               </TableHeaderCell>
             </TableRow>
